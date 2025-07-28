@@ -74,21 +74,3 @@
             android:value="2" />
     </application>
 </manifest>
-
-<!-- ios/Runner/Info.plist additions -->
-<!-- Add these keys to your Info.plist -->
-<key>UIBackgroundModes</key>
-<array>
-    <string>background-processing</string>
-    <string>background-fetch</string>
-</array>
-
-<!-- Permission descriptions -->
-<key>NSUserNotificationUsageDescription</key>
-<string>This app needs notification access to remind you about your medication schedule.</string>
-
-<!-- For local notifications -->
-<key>BGTaskSchedulerPermittedIdentifiers</key>
-<array>
-    <string>$(PRODUCT_BUNDLE_IDENTIFIER).refresh</string>
-</array>
