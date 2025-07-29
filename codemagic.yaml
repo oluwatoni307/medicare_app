@@ -3,7 +3,7 @@ workflows:
     name: Android Workflow
     environment:
       flutter: "3.32.4"
-      java: "11"
+      java: "17"
     scripts:
       - name: Clean and rebuild Gradle
         script: |
