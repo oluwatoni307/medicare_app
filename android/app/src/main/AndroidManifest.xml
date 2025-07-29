@@ -1,8 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"> <!-- Added tools namespace -->
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Essential Permissions -->
-    <uses-permission android:name="android.permission.INTERNET"/> <!-- Added Internet permission -->
+    <uses-permission android:name="android.permission.INTERNET"/>
 
     <!-- Notification permissions -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -16,7 +17,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
     <application
-        android:label="MediCare App" <!-- Updated from placeholder -->
+        android:label="MediCare App"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 
@@ -30,7 +31,7 @@
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"
             android:exported="false"
-            tools:node="merge"> <!-- tools namespace now declared -->
+            tools:node="merge">
             <meta-data
                 android:name="androidx.work.WorkManagerInitializer"
                 android:value="androidx.startup" />
