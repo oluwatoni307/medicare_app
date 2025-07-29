@@ -1,0 +1,10 @@
+scripts:
+  - name: Fix Gradle
+    script: |
+      flutter clean
+      flutter pub get
+      cd android
+      ./gradlew wrapper --gradle-version=8.0
+      cd ..
+  - name: Build
+    script: flutter build appbundle --debug
