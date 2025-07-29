@@ -2,10 +2,17 @@ workflows:
   android-workflow:
     name: Android Workflow
     scripts:
-      - name: Upgrade Gradle
+      - name: Create new Flutter project structure
         script: |
-          cd android
-          ./gradlew wrapper --gradle-version=8.4
-          cd ..
+          flutter create temp_project
+          cp -r lib temp_project/
+          cp pubspec.yaml temp_project/
+          cp -r assets temp_project/ || true
+          rm -rf android ios
+          cp -r temp_project/android .
+          cp -r temp_project/ios .
+          rm -rf temp_project
+      - name: Get dependencies
+        script: flutter pub get
       - name: Build
         script: flutter build appbundle --debug
