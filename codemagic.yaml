@@ -1,18 +1,16 @@
 workflows:
   android-workflow:
     name: Android Workflow
+    environment:
+      flutter: "3.32.4"
+      java: "11"
     scripts:
-      - name: Create new Flutter project structure
+      - name: Clean and rebuild Gradle
         script: |
-          flutter create temp_project
-          cp -r lib temp_project/
-          cp pubspec.yaml temp_project/
-          cp -r assets temp_project/ || true
-          rm -rf android ios
-          cp -r temp_project/android .
-          cp -r temp_project/ios .
-          rm -rf temp_project
-      - name: Get dependencies
-        script: flutter pub get
+          flutter clean
+          flutter pub get
+          cd android
+          ./gradlew clean
+          cd ..
       - name: Build
         script: flutter build appbundle --debug
