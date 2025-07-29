@@ -21,11 +21,6 @@
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 
-        <!-- Notification icon (ensure res/drawable/notification_icon.png exists) -->
-        <meta-data
-            android:name="com.google.firebase.messaging.default_notification_icon"
-            android:resource="@drawable/notification_icon" />
-
         <!-- WorkManager initialization -->
         <provider
             android:name="androidx.startup.InitializationProvider"
