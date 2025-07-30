@@ -13,12 +13,23 @@ import 'package:flutter/material.dart'; // For TimeOfDay, DateTime operations
 class LogService {
   late Box<Med> _medsBox;
   late Box<LogModel> _globalLogsBox; // Global Hive LogModel
+  
+  bool _isInitialized = false;
+
+  /// Ensures that Hive boxes are initialized before any operations.
+  /// This method is safe to call multiple times.
+  Future<void> _ensureInitialized() async {
+    if (_isInitialized) return;
+    _medsBox = Hive.box<Med>('meds');
+    _globalLogsBox = Hive.box<LogModel>('logs');
+    _isInitialized = true;
+  }
 
   /// Initializes the service by getting references to the Hive boxes.
   /// Must be called after Hive is initialized.
+  /// This method is kept for backward compatibility but now uses _ensureInitialized internally.
   Future<void> init() async {
-    _medsBox = Hive.box<Med>('meds');
-    _globalLogsBox = Hive.box<LogModel>('logs');
+    await _ensureInitialized();
   }
 
   // --- Methods matching the expected ViewModel API ---
@@ -29,6 +40,8 @@ class LogService {
     required String medicineId,
     required String date, // Format: YYYY-MM-DD
   }) async {
+    await _ensureInitialized(); // Ensure boxes are initialized
+    
     try {
       final targetDate = DateTime.parse(date);
       final targetDateNormalized = DateTime(targetDate.year, targetDate.month, targetDate.day);
@@ -125,6 +138,8 @@ class LogService {
 
   /// Fetch medication name by ID
   Future<String?> getMedicineName(String medicineId) async {
+    await _ensureInitialized(); // Ensure boxes are initialized
+    
     try {
       final Med medication = _medsBox.values.firstWhere((med) => med.id == medicineId);
       return medication.name;
@@ -141,6 +156,8 @@ class LogService {
     required String date,
     required feature.LogStatus status,
   }) async {
+    await _ensureInitialized(); // Ensure boxes are initialized
+    
     // Delegate to saveLog with create semantics
     return await saveLog(scheduleId: scheduleId, status: status, date: date);
   }
@@ -152,6 +169,8 @@ class LogService {
     required String logId,
     required feature.LogStatus status,
   }) async {
+    await _ensureInitialized(); // Ensure boxes are initialized
+    
      // 1. Parse the logId to get medId, date, and index
       // Assuming logId format: "${medId}_${dateString}_${index}"
       final parts = logId.split('_');
@@ -184,6 +203,8 @@ class LogService {
     required feature.LogStatus status,
     String? date,
   }) async {
+    await _ensureInitialized(); // Ensure boxes are initialized
+    
     try {
       final logDateStr = date ?? DateTime.now().toIso8601String().split('T')[0];
       final targetDate = DateTime.parse(logDateStr);
@@ -273,6 +294,8 @@ class LogService {
 
   /// Get specific log for a schedule and date
   Future<feature.LogModel?> getLog({required String scheduleId, String? date}) async {
+    await _ensureInitialized(); // Ensure boxes are initialized
+    
     try {
       final logDateStr = date ?? DateTime.now().toIso8601String().split('T')[0];
 
@@ -312,6 +335,8 @@ class LogService {
   /// Delete a log entry (schedule-centric API)
   /// Implementation: Mark the specific schedule index as not taken (0) in the global log
   Future<void> deleteLog({required String scheduleId, String? date}) async {
+    await _ensureInitialized(); // Ensure boxes are initialized
+    
     try {
       final logDateStr = date ?? DateTime.now().toIso8601String().split('T')[0];
 

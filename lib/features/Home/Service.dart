@@ -10,19 +10,27 @@ class DBhelper {
   // Hive boxes
   late Box<Med> _medsBox;
   late Box<LogModel> _logsBox;
+    bool _isInitialized = false; // Track if init was called
+
 
   DBhelper._internal();
 
   factory DBhelper() => _instance;
 
   // Initialize Hive boxes - call this during app startup
-  Future<void> init() async {
+  // This will be called automatically before any method runs
+  Future<void> _initIfNotDone() async {
+    if (_isInitialized) return;
+
     _medsBox = Hive.box<Med>('meds');
     _logsBox = Hive.box<LogModel>('logs');
-  }
+    _isInitialized = true;
 
+    print("✅ DBhelper: Ready! Meds box size: ${_medsBox.length}, Logs: ${_logsBox.length}");
+  }
   // Get homepage data for a specific user
   Future<HomepageData> getHomepageData(String userId) async {
+    _initIfNotDone();
     try {
       final upcomingMeds = await _getUpcomingMedicinesWithType(userId);
       final medications = upcomingMeds

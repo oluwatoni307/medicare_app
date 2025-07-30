@@ -7,13 +7,20 @@ class MedicationService {
   late Box<Med> _medsBox;
   late Box<LogModel> _logsBox;
 
-  Future<void> init() async {
+  bool _isInitialized = false;
+
+  // Add this method
+  Future<void> _ensureInitialized() async {
+    if (_isInitialized) return;
+
     _medsBox = Hive.box<Med>('meds');
     _logsBox = Hive.box<LogModel>('logs');
+    _isInitialized = true;
   }
 
   /* ---------- CREATE ---------- */
   Future<void> addMedication(MedicationModel med, String userId) async {
+    await _ensureInitialized(); // Ensure boxes are initialized
     try {
       final hiveMed = Med(
         id: med.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
@@ -33,6 +40,7 @@ class MedicationService {
 
   /* ---------- READ ---------- */
   Future<List<MedicationModel>> getMedications(String userId) async {
+    await _ensureInitialized(); // Ensure boxes are initialized
     try {
       final hiveMeds = _medsBox.values.toList();
       return hiveMeds.map((hiveMed) => _convertHiveMedToModel(hiveMed)).toList();
@@ -43,6 +51,7 @@ class MedicationService {
 
   /* ---------- UPDATE ---------- */
   Future<void> updateMedication(String id, MedicationModel med) async {
+    await _ensureInitialized(); // Ensure boxes are initialized
     try {
       // Find and update the medication
       for (int i = 0; i < _medsBox.length; i++) {
@@ -69,6 +78,8 @@ class MedicationService {
 
   /* ---------- DELETE ---------- */
   Future<void> deleteMedication(String id) async {
+        await _ensureInitialized(); // Ensure boxes are initialized
+
     try {
       for (int i = 0; i < _medsBox.length; i++) {
         final med = _medsBox.getAt(i);
@@ -97,6 +108,8 @@ class MedicationService {
   // }
 
   Future<List<LogModel>> getLogsByMedId(String medId) async {
+        await _ensureInitialized(); // Ensure boxes are initialized
+
     try {
       return _logsBox.values
           .where((log) => log.medId == medId)
@@ -110,6 +123,7 @@ class MedicationService {
   
   // Calculate end date from duration string
   DateTime? _calculateEndDate(DateTime startDate, String? duration) {
+    
     if (duration == null || duration == 'indefinitely') {
       return null;
     }

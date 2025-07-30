@@ -14,12 +14,23 @@ import 'dart:collection'; // For StateError
 class AnalysisService {
   late Box<Med> _medsBox;
   late Box<LogModel> _logsBox; // Hive LogModel
+  
+  bool _isInitialized = false;
+
+  /// Ensures that Hive boxes are initialized before any operations.
+  /// This method is safe to call multiple times.
+  Future<void> _ensureInitialized() async {
+    if (_isInitialized) return;
+    _medsBox = Hive.box<Med>('meds');
+    _logsBox = Hive.box<LogModel>('logs');
+    _isInitialized = true;
+  }
 
   /// Initializes the service by getting references to the Hive boxes.
   /// Must be called after Hive is initialized.
+  /// This method is kept for backward compatibility but now uses _ensureInitialized internally.
   Future<void> init() async {
-    _medsBox = Hive.box<Med>('meds');
-    _logsBox = Hive.box<LogModel>('logs');
+    await _ensureInitialized();
   }
 
   // === PUBLIC API METHODS (Aligned with original signatures where possible) ===
@@ -27,6 +38,8 @@ class AnalysisService {
   /// Returns today's schedules with current status for individual doses.
   /// Output: List of DailyTile objects representing each scheduled dose.
   Future<List<DailyTile>> getDailyData(String date) async {
+    await _ensureInitialized(); // Ensure boxes are initialized
+    
     // Note: Original signature was getDailyData(String userId, String date).
     // In local-first, user context might be implicit or handled by filtering Meds if they have userId.
     // Assuming Meds are for the current user or user context is handled upstream.
@@ -96,6 +109,8 @@ class AnalysisService {
   /// Or, if UI needs more detail per day: Map<String, List<ChartDataPoint>> where value is list of meds with their %.
   /// Let's go with average % per day for simplicity and leveraging the percent field.
   Future<Map<String, double>> getWeeklyData(String startDate, String endDate) async {
+    await _ensureInitialized(); // Ensure boxes are initialized
+    
     // Note: Original signature was getWeeklyData(String userId, String startDate, String endDate).
     try {
       final startDt = DateTime.parse(startDate);
@@ -150,6 +165,8 @@ class AnalysisService {
   /// Returns specific medicine's weekly schedules.
   /// Returns average adherence % per day for the specified medicine.
   Future<Map<String, double>> getWeeklyMedicineData(String medicineId, String startDate, String endDate) async {
+    await _ensureInitialized(); // Ensure boxes are initialized
+    
     try {
       final startDt = DateTime.parse(startDate);
       final endDt = DateTime.parse(endDate);
@@ -194,6 +211,8 @@ class AnalysisService {
   /// Returns month's daily aggregated adherence percentages.
   /// Output: Map<String, double> where key is date ("YYYY-MM-DD") and value is average adherence % for that day.
   Future<Map<String, double>> getMonthlyData(String month) async {
+    await _ensureInitialized(); // Ensure boxes are initialized
+    
     // Note: Original signature was getMonthlyData(String userId, String month).
     try {
       final monthStart = DateTime.parse('$month-01');
@@ -240,6 +259,8 @@ class AnalysisService {
   /// Returns specific medicine's monthly aggregates.
   /// Output: Map<String, double> where key is date ("YYYY-MM-DD") and value is adherence % for that day.
   Future<Map<String, double>> getMonthlyMedicineData(String medicineId, String month) async {
+    await _ensureInitialized(); // Ensure boxes are initialized
+    
      try {
       final monthStart = DateTime.parse('$month-01');
       final monthEnd = DateTime(monthStart.year, monthStart.month + 1, 0);
