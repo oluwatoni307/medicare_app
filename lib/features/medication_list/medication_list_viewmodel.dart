@@ -1,50 +1,51 @@
 // medication_list_viewmodel.dart
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import '../AddMedication/AddMedication_model.dart';
-import '../auth/service.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import '/data/models/med.dart'; // Hive Med with List<TimeOfDay> scheduleTimes
 
 class MedicationListViewModel extends ChangeNotifier {
-  final AuthService _authService = AuthService();
-  List<MedicationModel> _medications = [];
+  List<Med> _medications = [];
   bool _isLoading = false;
-  final SupabaseClient _client = Supabase.instance.client;
+  late Box<Med> _medicationsBox;
 
-  List<MedicationModel> get medications => _medications;
+  List<Med> get medications => _medications;
   bool get isLoading => _isLoading;
 
-  // Active = end_date >= today
-  List<MedicationModel> get activeMedications => _medications.where(_isMedicationActive).toList();
+  // Active = end_date >= today or no end date
+  List<Med> get activeMedications => _medications.where(_isMedicationActive).toList();
 
   // Completed = end_date < today
-  List<MedicationModel> get completedMedications => _medications.where((m) => !_isMedicationActive(m)).toList();
-bool _isMedicationActive(MedicationModel medication) {
-  final endDateString = _medicationEndDates[medication.id];
-  if (endDateString == null) return true;
+  List<Med> get completedMedications => _medications.where((m) => !_isMedicationActive(m)).toList();
 
-  final endDate = DateTime.tryParse(endDateString);
-  if (endDate == null) return true;
-
-  final today = DateTime.now();
-  return endDate.isAfter(today) || endDate.isAtSameMomentAs(today);
-}
-  MedicationListViewModel() {
-    fetchMedications();
+  bool _isMedicationActive(Med medication) {
+    if (medication.endAt == null) return true;
+    
+    final today = DateTime.now();
+    final endDate = medication.endAt!;
+    return endDate.isAfter(today) || endDate.isAtSameMomentAs(today);
   }
 
-  Future<void> fetchMedications() async {
+  MedicationListViewModel() {
+    _init();
+  }
+
+  Future<void> _init() async {
+    await _openBox();
+    await loadMedications();
+  }
+
+  Future<void> _openBox() async {
+    _medicationsBox = await Hive.openBox<Med>('medications');
+  }
+
+  Future<void> loadMedications() async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      final user = _authService.getCurrentUser();
-      if (user == null) {
-        _medications = [];
-      } else {
-        _medications = await getMedications(user.id);
-      }
+      _medications = _medicationsBox.values.toList();
     } catch (e) {
-      print('Fetch medications error: $e');
+      print('Load medications error: $e');
       _medications = [];
     }
 
@@ -53,19 +54,37 @@ bool _isMedicationActive(MedicationModel medication) {
   }
 
   Future<void> refreshMedications() async {
-    await fetchMedications();
+    await loadMedications();
   }
 
-  // Delete medication (schedules first due to FK)
+  // Add new medication
+  Future<void> addMedication(Med medication) async {
+    try {
+      await _medicationsBox.put(medication.id, medication);
+      await loadMedications();
+    } catch (e) {
+      print('Add medication error: $e');
+    }
+  }
+
+  // Update existing medication
+  Future<void> updateMedication(Med medication) async {
+    try {
+      await _medicationsBox.put(medication.id, medication);
+      await loadMedications();
+    } catch (e) {
+      print('Update medication error: $e');
+    }
+  }
+
+  // Delete medication
   Future<void> deleteMedication(String medicationId) async {
     try {
       _isLoading = true;
       notifyListeners();
 
-      await _client.from('schedules').delete().eq('medicine_id', medicationId);
-      await _client.from('medicines').delete().eq('id', medicationId);
-
-      await fetchMedications();
+      await _medicationsBox.delete(medicationId);
+      await loadMedications();
     } catch (e) {
       print('Delete medication error: $e');
     } finally {
@@ -74,7 +93,7 @@ bool _isMedicationActive(MedicationModel medication) {
     }
   }
 
-  MedicationModel? getMedicationById(String id) {
+  Med? getMedicationById(String id) {
     try {
       return _medications.firstWhere((med) => med.id == id);
     } catch (e) {
@@ -82,52 +101,17 @@ bool _isMedicationActive(MedicationModel medication) {
     }
   }
 
-// Store end dates separately
-final Map<String, String> _medicationEndDates = {};
-
-// In getMedications():
-Future<List<MedicationModel>> getMedications(String userId) async {
-  try {
-    final response = await _client
-        .from('medicines')
-        .select('id, name, dosage, type, schedules(start_date, end_date)')
-        .eq('user_id', userId)
-        .order('created_at', ascending: false);
-
-    final List<dynamic> data = response;
-
-    // Clear old end dates
-    _medicationEndDates.clear();
-
-    return data.map((json) {
-      final schedules = json['schedules'] as List<dynamic>? ?? [];
-      final firstSchedule = schedules.isNotEmpty ? schedules[0] as Map<String, dynamic> : null;
-
-      // Extract end_date and save it separately
-      final endDate = firstSchedule?['end_date'] as String?;
-      if (endDate != null) {
-        _medicationEndDates[json['id']] = endDate;
-      }
-
-      return MedicationModel(
-        id: json['id'],
-        medicationName: json['name'],
-        dosage: json['dosage'],
-        type: json['type'],
-        // Only pass fields that exist in the model
-      );
-    }).toList();
-  } catch (e) {
-    throw Exception('Get medications error: $e');
-  }
-}
-
   // Search medications
-  List<MedicationModel> searchMedications(String query) {
+  List<Med> searchMedications(String query) {
     final queryLower = query.toLowerCase();
     return _medications.where((med) {
-      final name = med.medicationName?.toLowerCase() ?? '';
+      final name = med.name.toLowerCase();
       return name.contains(queryLower);
     }).toList();
+  }
+
+  // Close box when done (optional, for cleanup)
+  Future<void> closeBox() async {
+    await _medicationsBox.close();
   }
 }

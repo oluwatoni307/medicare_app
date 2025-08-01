@@ -1,18 +1,25 @@
+// profile_viewmodel.dart
 import 'package:flutter/foundation.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'profile_model.dart';
+import '../auth/service.dart';
+import '/data/models/med.dart'; // Hive Med with List<TimeOfDay> scheduleTimes
 
 /// === PROFILE VIEWMODEL OVERVIEW ===
-/// Purpose: State management for profile page data and actions with Supabase integration
-/// Dependencies: Supabase client for user/medicine data operations
+/// Purpose: State management for profile page data with hybrid approach
+/// - User profile: LOCAL ONLY (no Supabase queries for name/email)
+/// - Medicine  Local Hive storage
 class ProfileViewModel extends ChangeNotifier {
   static SupabaseClient get _client => Supabase.instance.client;
+  final AuthService _authService = AuthService();
   
   // === STATE PROPERTIES ===
   bool _isLoading = false;
   String? _error;
   ProfileModel? _profile;
   bool _isSigningOut = false;
+  Box<Med>? _medicationsBox; // Make it nullable to avoid LateInitializationError
 
   // === GETTERS ===
   bool get isLoading => _isLoading;
@@ -24,46 +31,57 @@ class ProfileViewModel extends ChangeNotifier {
   ProfileUserModel? get user => _profile?.user;
   ProfileStatsModel? get stats => _profile?.stats;
 
+  // === INITIALIZATION ===
+  ProfileViewModel() {
+    _init();
+  }
+
+  Future<void> _init() async {
+    await _openMedicationsBox();
+  }
+
+  Future<void> _openMedicationsBox() async {
+    try {
+      _medicationsBox = await Hive.openBox<Med>('medications');
+    } catch (e) {
+      print('Error opening medications box: $e');
+      _medicationsBox = null;
+    }
+  }
+
   // === PUBLIC METHODS ===
   
-  /// Load user profile and statistics from Supabase
+  /// Load user profile and statistics (LOCAL ONLY)
   Future<void> loadProfile() async {
     _setLoading(true);
     _clearError();
 
     try {
-      // Get current user from Supabase auth session
-      final currentUser = _client.auth.currentUser;
+      // Get current user from auth service (this is LOCAL - from auth session)
+      final currentUser = _authService.getCurrentUser();
       if (currentUser == null) {
         throw 'No authenticated user found';
       }
       
-      final userId = currentUser.id;
-      print("Loading profile for authenticated user: $userId");
       
-      // 1. Fetch user data
-      final userData = await _getUserById(userId);
-      if (userData == null) {
-        throw 'User not found';
-      }
+      // 1. USE LOCAL DATA ONLY - no Supabase queries for name/email
+      // The AuthService.getCurrentUser() gives us ID and email from local auth session
+      // For name, we assume it's available locally or use a default
       
-      // 2. Fetch medicine count
-      final medicineCount = await _getMedicineCountForUser(userId);
+      // 2. Get medicine count from LOCAL Hive storage
+      final medicineCount = _getLocalMedicineCount();
       
-      // 3. Fetch last activity (most recent log entry)
-      final lastActivity = await _getLastActivityForUser(userId);
-      
-      // Create profile models
+      // Create profile models using LOCAL data only
       final profileUser = ProfileUserModel(
-        id: userData['id'],
-        name: userData['name'] ?? 'Unknown User',
-        email: userData['email'] ?? '',
-        createdAt: DateTime.parse(userData['created_at']),
+        id: currentUser.id,
+        name: currentUser.name ?? 'User', // Use name from local auth model
+        email: currentUser.email,
+        createdAt: DateTime.now(), // or store this locally
       );
       
       final profileStats = ProfileStatsModel(
         totalMedicines: medicineCount,
-        lastActivity: lastActivity,
+        lastActivity: null, // Local data only
       );
       
       _profile = ProfileModel(
@@ -71,7 +89,7 @@ class ProfileViewModel extends ChangeNotifier {
         stats: profileStats,
       );
       
-      print("Profile loaded successfully");
+      print("Profile loaded successfully (LOCAL ONLY)");
       
     } catch (e) {
       print('Error loading profile: $e');
@@ -81,45 +99,27 @@ class ProfileViewModel extends ChangeNotifier {
     }
   }
 
-  /// Refresh profile data
+  /// Refresh profile data (still LOCAL ONLY)
   Future<void> refreshProfile() async {
     await loadProfile();
   }
 
-  /// Update user name in Supabase and local state
+  /// Update user name - only update local state, no Supabase
   Future<void> updateUserName(String newName) async {
-    // Get current user from auth session
-    final currentUser = _client.auth.currentUser;
-    if (currentUser == null) {
-      _setError('No authenticated user found');
-      return;
-    }
-    
     _setLoading(true);
     _clearError();
 
     try {
-      print("Updating user name to: $newName");
+      print("Updating user name locally to: $newName");
       
-      // Update in Supabase
-      final response = await _client
-          .from('users')
-          .update({'name': newName})
-          .eq('id', currentUser.id)
-          .select();
-      
-      if (response.isEmpty) {
-        throw 'Failed to update user name in database';
-      }
-      
-      // Update local state
+      // UPDATE LOCAL STATE ONLY - no Supabase calls for profile data
       if (_profile != null) {
         _profile = _profile!.copyWith(
           user: _profile!.user.copyWith(name: newName),
         );
       }
       
-      print("User name updated successfully");
+      print("User name updated successfully (LOCAL ONLY)");
       
     } catch (e) {
       print('Error updating user name: $e');
@@ -129,40 +129,22 @@ class ProfileViewModel extends ChangeNotifier {
     }
   }
 
-  /// Update user email in Supabase and local state
+  /// Update user email - only update local state, no Supabase
   Future<void> updateUserEmail(String newEmail) async {
-    // Get current user from auth session
-    final currentUser = _client.auth.currentUser;
-    if (currentUser == null) {
-      _setError('No authenticated user found');
-      return;
-    }
-    
     _setLoading(true);
     _clearError();
 
     try {
-      print("Updating user email to: $newEmail");
+      print("Updating user email locally to: $newEmail");
       
-      // Update in Supabase
-      final response = await _client
-          .from('users')
-          .update({'email': newEmail})
-          .eq('id', currentUser.id)
-          .select();
-      
-      if (response.isEmpty) {
-        throw 'Failed to update user email in database';
-      }
-      
-      // Update local state
+      // UPDATE LOCAL STATE ONLY - no Supabase calls for profile data
       if (_profile != null) {
         _profile = _profile!.copyWith(
           user: _profile!.user.copyWith(email: newEmail),
         );
       }
       
-      print("User email updated successfully");
+      print("User email updated successfully (LOCAL ONLY)");
       
     } catch (e) {
       print('Error updating user email: $e');
@@ -172,7 +154,7 @@ class ProfileViewModel extends ChangeNotifier {
     }
   }
 
-  /// Sign out user - clear Supabase session and local data
+  /// Sign out user - clear Supabase session only
   Future<bool> signOut() async {
     _isSigningOut = true;
     _clearError();
@@ -209,62 +191,18 @@ class ProfileViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  // === PRIVATE DATABASE METHODS ===
+  // === PRIVATE METHODS ===
 
-  /// Get user by ID from Supabase
-  Future<Map<String, dynamic>?> _getUserById(String userId) async {
+  /// Get medicine count from LOCAL Hive storage
+  int _getLocalMedicineCount() {
     try {
-      final response = await _client
-          .from('users')
-          .select('id, name, email, created_at')
-          .eq('id', userId)
-          .single();
-      
-      return response;
-    } catch (e) {
-      print('Error fetching user: $e');
-      throw 'Error fetching user data: $e';
-    }
-  }
-
-  /// Get medicine count for user from Supabase
-  Future<int> _getMedicineCountForUser(String userId) async {
-    try {
-      final response = await _client
-          .from('medicines')
-          .select('id')
-          .eq('user_id', userId);
-      
-      return response.length;
-    } catch (e) {
-      print('Error fetching medicine count: $e');
-      throw 'Error fetching medicine count: $e';
-    }
-  }
-
-  /// Get last activity for user from Supabase
-  Future<DateTime?> _getLastActivityForUser(String userId) async {
-    try {
-      final response = await _client
-          .from('logs')
-          .select('''
-            created_at,
-            schedules!inner(
-              medicines!inner(user_id)
-            )
-          ''')
-          .eq('schedules.medicines.user_id', userId)
-          .order('created_at', ascending: false)
-          .limit(1);
-      
-      if (response.isNotEmpty) {
-        return DateTime.parse(response.first['created_at']);
+      if (_medicationsBox != null) {
+        return _medicationsBox!.length;
       }
-      
-      return null;
+      return 0;
     } catch (e) {
-      print('Error fetching last activity: $e');
-      throw 'Error fetching last activity: $e';
+      print('Error getting local medicine count: $e');
+      return 0;
     }
   }
 
@@ -289,18 +227,6 @@ class ProfileViewModel extends ChangeNotifier {
     if (_error != null) {
       _error = null;
       notifyListeners();
-    }
-  }
-
-  // === UTILITY METHODS ===
-
-  /// Test database connection
-  Future<void> testDatabaseConnection() async {
-    try {
-      await _client.from('users').select().limit(1);
-      print('Profile database connection successful');
-    } catch (e) {
-      print('Error connecting to database: $e');
     }
   }
 }

@@ -1,4 +1,6 @@
 // lib/features/analysis/analysis_viewmodel.dart
+// ignore_for_file: unused_local_variable
+
 import 'package:flutter/foundation.dart';
 // --- Update import for models ---
 import 'analysis_model.dart'; // Adjust path if needed

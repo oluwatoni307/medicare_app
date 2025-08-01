@@ -4,6 +4,7 @@ import 'package:medicare_app/features/auth/auth_model.dart';
 import 'package:medicare_app/features/auth/service.dart';
 import 'package:provider/provider.dart';
 import './theme.dart';
+import 'features/notifications/daily_notification_worker.dart';
 import 'routes.dart' show AppRoutes;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -16,6 +17,8 @@ String anonKey =
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initHive();
+   await initializeWorkManager(); // Function from daily_notification_worker.dart
+  
   try {
     await Supabase.initialize(
       url: 'https://ucejrkydjqjymsepgsyz.supabase.co',

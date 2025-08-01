@@ -21,37 +21,34 @@ class _BottomNavBarState extends State<BottomNavBar> {
     super.initState();
     _selectedIndex = widget.currentIndex;
   }
-
-  void _onItemTapped(int index) {
-    // Only update state and navigate if it's a different tab
-    if (_selectedIndex != index) {
-      setState(() {
-        _selectedIndex = index;
-      });
-      
-      // Navigate to different routes based on the selected index
-      switch (index) {
-        case 0:
-          // Home
-          Navigator.pushReplacementNamed(context, '/');
-          break;
-        case 1:
-          // Insights/Analysis
-          Navigator.pushReplacementNamed(context, '/analysis');
-          break;
-     
-        case 2:
-          // Medication List
-          Navigator.pushReplacementNamed(context, '/medication_list');
-          break;
-        case 3:
-          // Profile
-          Navigator.pushReplacementNamed(context, '/profile');
-          break;
-      }
+void _onItemTapped(int index) {
+  // Only update state and navigate if it's a different tab
+  if (_selectedIndex != index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+    
+    // Navigate to different routes based on the selected index
+    switch (index) {
+      case 0:
+        // Home - clear stack and go to home
+        Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+        break;
+      case 1:
+        // Insights/Analysis
+        Navigator.pushReplacementNamed(context, '/analysis');
+        break;
+      case 2:
+        // Medication List
+        Navigator.pushReplacementNamed(context, '/medication_list');
+        break;
+      case 3:
+        // Profile
+        Navigator.pushReplacementNamed(context, '/profile');
+        break;
     }
   }
-
+}
   @override
   Widget build(BuildContext context) {
     return Container(

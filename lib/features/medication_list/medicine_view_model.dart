@@ -5,12 +5,12 @@ import 'medicine_model.dart'; // New model
 // import '/data/models/med.dart'; // Hive Med
 import '/data/models/log.dart'; // Hive LogModel
 // Assuming AuthService is elsewhere and unchanged
-import '../auth/service.dart'; // Adjust path as needed
+// import '../auth/service.dart'; // Adjust path as needed
 
 class MedicationDetailViewModel extends ChangeNotifier {
   // --- Update service type ---
   final MedicationDetailService _service = MedicationDetailService();
-  final AuthService _authService = AuthService();
+  // final AuthService _authService = AuthService();
 
   // --- Update data type ---
   MedicationDetail? _medicationDetail; // Use the new model

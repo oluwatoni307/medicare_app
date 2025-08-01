@@ -7,7 +7,6 @@ import '/data/models/log.dart'; // Hive LogModel (with percent and takenSchedule
 // Let's assume they are accessible.
 import 'analysis_model.dart';
 import 'package:flutter/material.dart'; // For TimeOfDay, DateTime operations
-import 'dart:collection'; // For StateError
 
 /// Service to fetch and aggregate medication adherence data for analysis views.
 /// Works with the new local-first Hive models (Med, LogModel).

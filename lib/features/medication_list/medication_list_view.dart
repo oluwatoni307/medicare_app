@@ -114,8 +114,8 @@ class MedicationListView extends StatelessWidget {
                 onRefresh: () => viewModel.refreshMedications(),
                 child: TabBarView(
                   children: [
-                    _buildMedicationList(context, viewModel, viewModel.activeMedications, 'No active medications yet.', true),
-                    _buildMedicationList(context, viewModel, viewModel.completedMedications, 'No completed medications.', false),
+                    _buildMedicationList(context, viewModel, viewModel.activeMedications.cast<MedicationModel>(), 'No active medications yet.', true),
+                    _buildMedicationList(context, viewModel, viewModel.completedMedications.cast<MedicationModel>(), 'No completed medications.', false),
                   ],
                 ),
               );

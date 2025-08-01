@@ -1,4 +1,4 @@
-// lib/features/analysis/analysis_view.dart
+// lib/features/analysis/analysis_view.dart - FIXED VERSION
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -22,16 +22,6 @@ class _AnalysisDashboardViewState extends State<AnalysisDashboardView> with Tick
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _tabController.addListener(() {
-      if (!_tabController.indexIsChanging) {
-        final viewModel = Provider.of<AnalysisViewModel>(context, listen: false);
-        viewModel.setSelectedView(_tabController.index == 0
-            ? 'Monthly'
-            : _tabController.index == 1
-                ? 'Weekly'
-                : 'Daily');
-      }
-    });
   }
 
   @override
@@ -42,45 +32,61 @@ class _AnalysisDashboardViewState extends State<AnalysisDashboardView> with Tick
 
   @override
   Widget build(BuildContext context) {
+    // ✅ FIXED: Move ChangeNotifierProvider to the top level
     return ChangeNotifierProvider(
       create: (context) => AnalysisViewModel()..loadAllData(),
       child: Scaffold(
-        bottomNavigationBar: const BottomNavBar(currentIndex: 1,),
-        body: Column(
+        bottomNavigationBar: const BottomNavBar(currentIndex: 1),
+        body: Consumer<AnalysisViewModel>(
+          builder: (context, viewModel, child) {
+            // ✅ FIXED: Add listener here where Provider is available
+            _tabController.addListener(() {
+              if (!_tabController.indexIsChanging) {
+                viewModel.setSelectedView(_tabController.index == 0
+                    ? 'Monthly'
+                    : _tabController.index == 1
+                        ? 'Weekly'
+                        : 'Daily');
+              }
+            });
 
-          children: [
-            _buildHeader(),
-            Container(
-              color: const Color(0xFF4A90E2),
-              child: TabBar(
-                controller: _tabController,
-                labelColor: Colors.white,
-                unselectedLabelColor: Colors.white70,
-                indicatorColor: Colors.white,
-                tabs: const [
-                  Tab(text: 'Monthly'),
-                  Tab(text: 'Weekly'),
-                  Tab(text: 'Daily'),
-                ],
-              ),
-            ),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: const [
-                  MonthlyView(),
-                  WeeklyView(),
-                  DailyView(),
-                ],
-              ),
-            ),
-          ],
+            return Column(
+              children: [
+                SizedBox(height: 10,),
+                _buildHeader(),
+                Container(
+                  color: const Color(0xFF4A90E2),
+                  child: TabBar(
+                    controller: _tabController,
+                    labelColor: Colors.white,
+                    unselectedLabelColor: Colors.white70,
+                    indicatorColor: Colors.white,
+                    tabs: const [
+                      Tab(text: 'Monthly'),
+                      Tab(text: 'Weekly'),
+                      Tab(text: 'Daily'),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: const [
+                      MonthlyView(),
+                      WeeklyView(),
+                      DailyView(),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
   }
-}
-Widget _buildHeader() {
+
+  Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: const BoxDecoration(
@@ -135,3 +141,4 @@ Widget _buildHeader() {
       ),
     );
   }
+}
