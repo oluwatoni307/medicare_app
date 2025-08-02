@@ -3,7 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Essential Permissions -->
-    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- Notification permissions -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -13,30 +13,21 @@
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
-    <!-- Background work and system management -->
+    <!-- Background work permissions -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    
-    <!-- Android 12+ background work -->
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- Boot receiver permissions -->
     <uses-permission android:name="android.permission.QUICKBOOT_POWERON" />
-    
-    <!-- HTC devices -->
-    <uses-permission android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
-    
-    <!-- Xiaomi devices -->
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:label="MediCare App"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:allowBackup="true"
-        android:requestLegacyExternalStorage="false">
+        android:allowBackup="true">
 
-        <!-- WorkManager initialization with better configuration -->
+        <!-- WorkManager initialization -->
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"
@@ -47,24 +38,20 @@
                 android:value="androidx.startup" />
         </provider>
 
-        <!-- Enhanced boot receiver for better reliability -->
+        <!-- Boot receiver for notifications -->
         <receiver
             android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
             android:enabled="true"
-            android:exported="false"
-            android:priority="1000">
+            android:exported="false">
             <intent-filter android:priority="1000">
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
                 <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-                <action android:name="android.intent.action.PACKAGE_REPLACED" />
-                <data android:scheme="package" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </receiver>
 
-        <!-- Additional receiver for notification actions -->
+        <!-- Notification action receiver -->
         <receiver
             android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver"
             android:enabled="true"
@@ -75,97 +62,52 @@
             </intent-filter>
         </receiver>
 
-        <!-- Foreground service for critical background tasks -->
+        <!-- Foreground service for WorkManager -->
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="dataSync"
             android:exported="false"
             tools:node="merge" />
 
-        <!-- Background service for WorkManager -->
-        <service
-            android:name="androidx.work.impl.background.systemalarm.SystemAlarmService"
-            android:enabled="true"
-            android:exported="false"
-            tools:replace="android:enabled" />
-
-        <!-- Main Activity with enhanced notification handling -->
+        <!-- Main Activity -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:taskAffinity=""
             android:theme="@style/LaunchTheme"
-            android:windowSoftInputMode="adjustResize"
-            android:screenOrientation="portrait"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
-            tools:node="merge">
+            android:windowSoftInputMode="adjustResize">
 
             <meta-data
-              android:name="io.flutter.embedding.android.NormalTheme"
-              android:resource="@style/NormalTheme" />
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
 
             <!-- Main launcher intent -->
             <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Enhanced notification handling -->
+            <!-- Notification handling -->
             <intent-filter>
                 <action android:name="FLUTTER_NOTIFICATION_CLICK" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
 
-            <!-- Handle notification actions -->
-            <intent-filter>
-                <action android:name="SELECT_NOTIFICATION" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-
-            <!-- Handle app opening from notifications -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="medicare" />
-            </intent-filter>
         </activity>
 
-        <!-- Notification channels and categories (Android 8+) -->
-        <meta-data
-            android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="medicine_reminders" />
-
-        <!-- WorkManager configuration -->
-        <meta-data
-            android:name="androidx.work.WorkManagerInitializer"
-            android:value="androidx.startup"
-            tools:node="remove" />
-
-        <!-- Battery optimization whitelist request -->
-        <meta-data
-            android:name="battery_optimization_required"
-            android:value="true" />
-
-        <!-- Notification importance level -->
-        <meta-data
-            android:name="default_notification_channel_importance"
-            android:value="4" />
-
-        <!-- Flutter embedding version -->
+        <!-- Flutter embedding metadata -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
 
-        <!-- Disable automatic backup for sensitive data -->
+        <!-- Notification channel configuration -->
         <meta-data
-            android:name="android.app.backup_agent"
-            android:value="" />
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="medicine_reminders" />
 
     </application>
 
-    <!-- Queries for Android 11+ package visibility -->
+    <!-- Queries for Android 11+ -->
     <queries>
         <intent>
             <action android:name="android.settings.APPLICATION_DETAILS_SETTINGS" />
@@ -173,7 +115,6 @@
         <intent>
             <action android:name="android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
         </intent>
-        <intent>
-            <action android:name="android.settings.NOTIFICATION_SETTINGS" />
-        </intent>
     </queries>
+
+</manifest>
