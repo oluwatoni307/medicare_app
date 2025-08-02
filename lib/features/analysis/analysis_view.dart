@@ -52,7 +52,6 @@ class _AnalysisDashboardViewState extends State<AnalysisDashboardView> with Tick
 
             return Column(
               children: [
-                SizedBox(height: 10,),
                 _buildHeader(),
                 Container(
                   color: const Color(0xFF4A90E2),
@@ -88,7 +87,7 @@ class _AnalysisDashboardViewState extends State<AnalysisDashboardView> with Tick
 
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(14, 23, 14, 10),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [Color(0xFF4A90E2), Color(0xFF357ABD)],

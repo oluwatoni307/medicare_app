@@ -15,6 +15,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../../data/models/log.dart';
 import '../../data/models/med.dart';
+import '../../data/models/time_of_day_adapter.dart';
 import '../log/log_model.dart' as feature;
 import '../log/service.dart';
 import 'notifications_model.dart';
@@ -110,19 +111,6 @@ class NotificationService {
   }
 
   /// Initialize notification system with modern async/await patterns
-  /// 
-  /// Returns [NotificationResult] indicating success or failure with details.
-  /// 
-  /// Example:
-  /// ```dart
-  /// final result = await NotificationService.instance.initialize();
-  /// switch (result) {
-  ///   case NotificationSuccess():
-  ///     // Proceed with app
-  ///   case NotificationError(message: final msg):
-  ///     // Handle error: msg
-  /// }
-  /// ```
   Future<NotificationResult> initialize() async {
     try {
       // Initialize timezone data first
@@ -237,6 +225,40 @@ class NotificationService {
     }
   }
 
+  /// DEMO FIX 1: Add comprehensive test notification method
+  Future<NotificationResult> scheduleTestNotification() async {
+    if (!_settings.notificationsEnabled) {
+      return NotificationError('Notifications are disabled in settings');
+    }
+
+    try {
+      // Create a realistic test notification
+      final testNotification = NotificationModel(
+        id: 'test_${DateTime.now().millisecondsSinceEpoch}',
+        title: '💊 Medicine Reminder Test',
+        body: 'Take 1 tablet of Vitamin D (Test notification with actions)',
+        scheduledTime: DateTime.now().add(const Duration(seconds: 5)),
+        medicineId: 'test_medicine_demo',
+        scheduleId: 'test_schedule_demo',
+      );
+
+      // Schedule the test notification with full functionality
+      final result = await _scheduleNotification(testNotification, isTestNotification: true);
+      
+      switch (result) {
+        case NotificationSuccess():
+          developer.log('Test notification scheduled successfully');
+          return NotificationSuccess('Test notification will appear in 5 seconds with action buttons');
+        case NotificationError(message: final message, exception: final exception):
+          developer.log('Failed to schedule test notification: $message', error: exception);
+          return NotificationError('Test notification failed: $message');
+      }
+    } catch (e, stackTrace) {
+      developer.log('Unexpected error in test notification', error: e, stackTrace: stackTrace);
+      return NotificationError('Unexpected error: $e');
+    }
+  }
+
   /// Schedule notifications for a medicine schedule with modern async patterns
   Future<NotificationResult> scheduleNotificationsForSchedule(
     ScheduleNotificationModel schedule,
@@ -258,7 +280,7 @@ class NotificationService {
 
       // Schedule all notifications in parallel for better performance
       final results = await Future.wait(
-        notifications.map(_scheduleNotification),
+        notifications.map((n) => _scheduleNotification(n)),
         eagerError: false, // Continue even if some fail
       );
 
@@ -442,54 +464,14 @@ class NotificationService {
     return notifications;
   }
 
-  /// Schedule single notification with modern notification details
-  Future<NotificationResult> _scheduleNotification(NotificationModel notification) async {
+  /// DEMO FIX 2: Schedule single notification with improved ID generation and payload handling
+  Future<NotificationResult> _scheduleNotification(
+    NotificationModel notification, {
+    bool isTestNotification = false,
+  }) async {
     try {
-      // Create unique, collision-resistant ID
-      final notificationId = _createUniqueNotificationId(notification.id);
-
-      // Modern Android notification details
-      final androidDetails = AndroidNotificationDetails(
-        'medicine_reminders',
-        'Medicine Reminders',
-        channelDescription: 'Notifications for medicine schedules',
-        importance: Importance.high,
-        priority: Priority.high,
-        playSound: _settings.soundEnabled,
-        enableVibration: _settings.vibrationEnabled,
-        category: AndroidNotificationCategory.reminder,
-        visibility: NotificationVisibility.public,
-        // Modern action buttons
-        actions: [
-          AndroidNotificationAction(
-            'TAKEN_${notificationId}',
-            'Taken',
-            titleColor: const Color.fromARGB(255, 0, 150, 0),
-          ),
-          AndroidNotificationAction(
-            'MISSED_${notificationId}',
-            'Missed',
-            titleColor: const Color.fromARGB(255, 200, 0, 0),
-          ),
-        ],
-      );
-
-      // Modern iOS/macOS notification details
-      final darwinDetails = DarwinNotificationDetails(
-        presentAlert: true,
-        presentBadge: true,
-        presentSound: _settings.soundEnabled,
-        presentBanner: true,
-        presentList: true,
-        categoryIdentifier: 'MEDICINE_REMINDER',
-        threadIdentifier: notification.medicineId,
-      );
-
-      final notificationDetails = NotificationDetails(
-        android: androidDetails,
-        iOS: darwinDetails,
-        macOS: darwinDetails,
-      );
+      // IMPROVED: Better unique ID generation using timestamp + hash
+      final notificationId = _generateUniqueNotificationId(notification.id);
 
       // Create payload for the main notification
       final mainPayload = Uri(queryParameters: {
@@ -498,9 +480,68 @@ class NotificationService {
         'scheduleId': notification.scheduleId,
         'date': notification.scheduledTime.dateString,
         'notificationId': notification.id,
+        'isTest': isTestNotification.toString(),
       }).query;
 
-      // Schedule with correct modern syntax - no payload or uiLocalNotificationDateInterpretation parameters
+      // DEMO FIX 3: Store payload BEFORE scheduling to prevent race condition
+      await _storeNotificationPayload(notificationId, mainPayload);
+
+      // Create comprehensive notification details for demo
+      final androidDetails = AndroidNotificationDetails(
+        'medicine_reminders',
+        'Medicine Reminders',
+        channelDescription: isTestNotification 
+          ? 'Test notifications for medicine schedules'
+          : 'Notifications for medicine schedules',
+        importance: Importance.high,
+        priority: Priority.high,
+        playSound: _settings.soundEnabled,
+        enableVibration: _settings.vibrationEnabled,
+        category: AndroidNotificationCategory.reminder,
+        visibility: NotificationVisibility.public,
+        // Enhanced action buttons with better styling
+        actions: [
+          AndroidNotificationAction(
+            'TAKEN_${notificationId}',
+            '✅ Taken',
+            titleColor: const Color.fromARGB(255, 0, 150, 0),
+            icon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
+          ),
+          AndroidNotificationAction(
+            'MISSED_${notificationId}',
+            '❌ Missed',
+            titleColor: const Color.fromARGB(255, 200, 0, 0),
+            icon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
+          ),
+        ],
+        // Add custom LED color and pattern for demo effect
+        ledColor: const Color.fromARGB(255, 0, 255, 0),
+        ledOnMs: 1000,
+        ledOffMs: 500,
+        // Custom sound if available
+        sound: _settings.soundEnabled ? 
+          const RawResourceAndroidNotificationSound('notification_sound') : null,
+      );
+
+      // Enhanced iOS/macOS notification details
+      final darwinDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: _settings.soundEnabled,
+        presentBanner: true,
+        presentList: true,
+        categoryIdentifier: isTestNotification ? 'TEST_MEDICINE_REMINDER' : 'MEDICINE_REMINDER',
+        threadIdentifier: notification.medicineId,
+        subtitle: isTestNotification ? 'Test Notification' : null,
+      );
+
+      final notificationDetails = NotificationDetails(
+        android: androidDetails,
+        iOS: darwinDetails,
+        macOS: darwinDetails,
+      );
+
+      // Schedule with improved timezone handling
       await _notifications.zonedSchedule(
         notificationId,
         notification.title,
@@ -510,9 +551,7 @@ class NotificationService {
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       );
 
-      // Store payload separately for handling notification response
-      await _storeNotificationPayload(notificationId, mainPayload);
-
+      developer.log('Scheduled notification ID: $notificationId for ${notification.scheduledTime}');
       return NotificationSuccess();
 
     } on Exception catch (e, stackTrace) {
@@ -525,10 +564,17 @@ class NotificationService {
     }
   }
 
-  /// Create collision-resistant notification ID
-  int _createUniqueNotificationId(String notificationStringId) {
-    // Use a more sophisticated approach than simple hashCode
-    return notificationStringId.hashCode.abs() % 2147483647; // Max int32 value
+  /// DEMO FIX 2: Improved unique notification ID generation
+  int _generateUniqueNotificationId(String notificationStringId) {
+    // Use timestamp + hash for better uniqueness and collision prevention
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final hash = notificationStringId.hashCode.abs();
+    
+    // Combine timestamp (last 6 digits) with hash (last 3 digits) for uniqueness
+    final uniqueId = (timestamp % 1000000) * 1000 + (hash % 1000);
+    
+    // Ensure it fits in int32 range
+    return uniqueId % 2147483647;
   }
 
   /// Modern timezone conversion with proper local timezone
@@ -586,18 +632,23 @@ class NotificationService {
     _processNotificationAction(response, isBackground: false);
   }
 
-  /// Background notification handler (static method required)
+  /// DEMO FIX 4: Enhanced background notification handler with proper validation
   @pragma('vm:entry-point')
   static void _handleBackgroundNotificationResponse(NotificationResponse response) {
-    // For background processing, we need to ensure proper initialization
+    // Ensure proper initialization for background processing
     NotificationService.instance._processNotificationAction(response, isBackground: true);
   }
 
-  /// Process notification actions with modern pattern matching
+  /// DEMO FIX 4: Process notification actions with background safety validation
   Future<void> _processNotificationAction(
     NotificationResponse response, {
     required bool isBackground,
   }) async {
+    // Background safety: Initialize Hive if we're in background and it's not already initialized
+    if (isBackground) {
+      await _ensureBackgroundInitialization();
+    }
+
     // First check if we have a direct payload from the response
     String? payload = response.payload;
     
@@ -617,6 +668,7 @@ class NotificationService {
       final medicineId = data['medicineId'];
       final scheduleId = data['scheduleId'];
       final dateString = data['date'];
+      final isTestString = data['isTest'];
 
       // Validate required data
       if (medicineId?.isEmpty ?? true) {
@@ -630,8 +682,9 @@ class NotificationService {
       }
 
       final action = NotificationAction.fromString(actionString);
+      final isTest = isTestString == 'true';
       
-      // Handle actions with modern switch expressions (Dart 3.0+)
+      // Handle actions with modern switch expressions
       switch (action) {
         case NotificationAction.taken:
           await _handleMedicineAction(
@@ -640,6 +693,7 @@ class NotificationService {
             dateString,
             feature.LogStatus.taken,
             isBackground: isBackground,
+            isTest: isTest,
           );
         case NotificationAction.missed:
           await _handleMedicineAction(
@@ -648,10 +702,11 @@ class NotificationService {
             dateString,
             feature.LogStatus.missed,
             isBackground: isBackground,
+            isTest: isTest,
           );
         case NotificationAction.navigate:
         case null:
-          await _handleNavigation(medicineId!, scheduleId!, dateString);
+          await _handleNavigation(medicineId!, scheduleId!, dateString, isTest: isTest);
       }
 
     } on Exception catch (e, stackTrace) {
@@ -663,16 +718,20 @@ class NotificationService {
     }
   }
 
-  /// Handle medicine action logging with proper Hive management
-  Future<void> _handleMedicineAction(
-    String medicineId,
-    String scheduleId,
-    String? dateString,
-    feature.LogStatus status, {
-    required bool isBackground,
-  }) async {
+  /// DEMO FIX 4: Ensure background initialization for Hive access
+  Future<void> _ensureBackgroundInitialization() async {
     try {
-      // Ensure Hive boxes are available (especially important for background processing)
+      // Check if Hive needs initialization
+      if (!Hive.isAdapterRegistered(0)) { // Med adapter typically has typeId 0
+        await Hive.initFlutter();
+        
+        // Register adapters
+        Hive.registerAdapter(MedAdapter());
+        Hive.registerAdapter(LogModelAdapter());
+        Hive.registerAdapter(TimeOfDayAdapter());
+      }
+
+      // Ensure boxes are open
       if (!Hive.isBoxOpen('meds')) {
         await Hive.openBox<Med>('meds');
       }
@@ -680,19 +739,48 @@ class NotificationService {
         await Hive.openBox<LogModel>('logs');
       }
 
-      // Ensure LogService is initialized
+      // Initialize LogService if needed
       await _logService.init();
 
-      final targetDateStr = dateString ?? DateTime.now().dateString;
+    } catch (e) {
+      developer.log('Error in background initialization: $e');
+      // Continue even if initialization fails - don't break notification handling
+    }
+  }
 
-      // Log the medicine action
+  /// Handle medicine action logging with proper test notification support
+  Future<void> _handleMedicineAction(
+    String medicineId,
+    String scheduleId,
+    String? dateString,
+    feature.LogStatus status, {
+    required bool isBackground,
+    bool isTest = false,
+  }) async {
+    try {
+      final targetDateStr = dateString ?? DateTime.now().dateString;
+      final statusText = status == feature.LogStatus.taken ? 'taken' : 'missed';
+
+      if (isTest) {
+        // For test notifications, just show confirmation
+        developer.log('TEST: Medicine $medicineId marked as $statusText');
+        
+        if (!isBackground) {
+          await _showQuickConfirmation(
+            'Test Notification Action',
+            'Demo: Medicine marked as $statusText ✅',
+          );
+        }
+        return;
+      }
+
+      // For real medications, log the action
       await _logService.saveLog(
         scheduleId: scheduleId,
         status: status,
         date: targetDateStr,
       );
 
-      final statusText = status == feature.LogStatus.taken ? 'taken' : 'missed';
       developer.log('Medicine $medicineId marked as $statusText for $targetDateStr');
 
       // Show confirmation if not in background
@@ -712,12 +800,22 @@ class NotificationService {
     }
   }
 
-  /// Handle navigation with callback pattern
+  /// Handle navigation with test notification support
   Future<void> _handleNavigation(
     String medicineId,
     String scheduleId,
-    String? dateString,
-  ) async {
+    String? dateString, {
+    bool isTest = false,
+  }) async {
+    if (isTest) {
+      // For test notifications, show a demo message
+      await _showQuickConfirmation(
+        'Test Navigation',
+        'Demo: Would navigate to medicine details 📱',
+      );
+      return;
+    }
+
     if (_navigationCallback != null) {
       final arguments = {
         'medicineId': medicineId,
@@ -732,17 +830,23 @@ class NotificationService {
     }
   }
 
-  /// Show quick confirmation notification
+  /// Show quick confirmation notification with enhanced styling
   Future<void> _showQuickConfirmation(String title, String body) async {
     try {
       const androidDetails = AndroidNotificationDetails(
         'quick_feedback',
         'Quick Feedback',
-        channelDescription: 'Brief confirmations',
+        channelDescription: 'Brief confirmations and test results',
         importance: Importance.low,
         priority: Priority.low,
-        timeoutAfter: 3000,
+        timeoutAfter: 4000,
         autoCancel: true,
+        ongoing: false,
+        // Add custom styling for demo effect
+        color: Color.fromARGB(255, 0, 150, 0),
+        ledColor: Color.fromARGB(255, 0, 255, 0),
+        ledOnMs: 500,
+        ledOffMs: 500,
       );
 
       const notificationDetails = NotificationDetails(android: androidDetails);

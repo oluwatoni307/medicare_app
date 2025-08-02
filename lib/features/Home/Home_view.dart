@@ -58,7 +58,7 @@ class _HomepageState extends State<Homepage> {
                 SliverToBoxAdapter(
                   child: Column(
                     children:  [
-                      SizedBox(height: 7),
+                      SizedBox(height: 10),
                       HeroSection(),
                       storyText(),
                       SizedBox(height: 20),

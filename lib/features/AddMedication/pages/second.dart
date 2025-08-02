@@ -218,6 +218,8 @@ class _CalendarWidgetState extends State<CalendarWidget> {
         border: Border.all(color: Colors.grey.shade300),
       ),
       child: TableCalendar(
+          daysOfWeekHeight: 45.0,  // Increase from default ~25 to 45
+
         firstDay: DateTime.now(), // Restrict to today or future
         lastDay: DateTime.utc(2030, 12, 31),
         focusedDay: _focusedDay,
@@ -257,7 +259,7 @@ class _CalendarWidgetState extends State<CalendarWidget> {
           ),
         ),
         headerStyle: const HeaderStyle(
-          formatButtonVisible: true,
+          // formatButtonVisible: true,
           titleCentered: true,
         ),
       ),

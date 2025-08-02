@@ -22,4 +22,9 @@ class Med {
     required this.startAt,
     this.endAt,
   });
+  
+  String get imageUrl {
+    if (type == null) return 'images/types/default.png';
+    return 'images/types/$type.png';
+  }
 }

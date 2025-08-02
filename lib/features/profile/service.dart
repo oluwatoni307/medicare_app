@@ -42,7 +42,7 @@ class ProfileViewModel extends ChangeNotifier {
 
   Future<void> _openMedicationsBox() async {
     try {
-      _medicationsBox = await Hive.openBox<Med>('medications');
+      _medicationsBox = await Hive.openBox<Med>('meds');
     } catch (e) {
       print('Error opening medications box: $e');
       _medicationsBox = null;
@@ -69,6 +69,8 @@ class ProfileViewModel extends ChangeNotifier {
       // For name, we assume it's available locally or use a default
       
       // 2. Get medicine count from LOCAL Hive storage
+        await _openMedicationsBox(); // <-- ADD THIS LINE
+
       final medicineCount = _getLocalMedicineCount();
       
       // Create profile models using LOCAL data only
@@ -194,18 +196,20 @@ class ProfileViewModel extends ChangeNotifier {
   // === PRIVATE METHODS ===
 
   /// Get medicine count from LOCAL Hive storage
-  int _getLocalMedicineCount() {
-    try {
-      if (_medicationsBox != null) {
-        return _medicationsBox!.length;
-      }
-      return 0;
-    } catch (e) {
-      print('Error getting local medicine count: $e');
-      return 0;
-    }
+/// Get *active* medicine count from LOCAL Hive storage
+int _getLocalMedicineCount() {
+  try {
+    if (_medicationsBox == null) return 0;
+    final now = DateTime.now();
+    return _medicationsBox!.values.where((med) {
+      if (med.endAt == null) return true;
+      return !med.endAt!.isBefore(now);
+    }).length;
+  } catch (e) {
+    debugPrint('Error counting active medicines: $e');
+    return 0;
   }
-
+}
   // === PRIVATE STATE METHODS ===
 
   /// Set loading state

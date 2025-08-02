@@ -2,10 +2,11 @@
 import 'package:flutter/material.dart';
 import 'package:medicare_app/theme.dart';
 import 'package:provider/provider.dart';
-import '../AddMedication/AddMedication_model.dart';
+// import '../AddMedication/AddMedication_model.dart';
 import '/routes.dart';
 import 'medication_list_viewmodel.dart';
 import 'medicine_view.dart';
+import '/data/models/med.dart';
 
 class MedicationListView extends StatelessWidget {
   const MedicationListView({super.key});
@@ -114,8 +115,8 @@ class MedicationListView extends StatelessWidget {
                 onRefresh: () => viewModel.refreshMedications(),
                 child: TabBarView(
                   children: [
-                    _buildMedicationList(context, viewModel, viewModel.activeMedications.cast<MedicationModel>(), 'No active medications yet.', true),
-                    _buildMedicationList(context, viewModel, viewModel.completedMedications.cast<MedicationModel>(), 'No completed medications.', false),
+                    _buildMedicationList(context, viewModel, viewModel.activeMedications.cast<Med>(), 'No active medications yet.', true),
+                    _buildMedicationList(context, viewModel, viewModel.completedMedications.cast<Med>(), 'No completed medications.', false),
                   ],
                 ),
               );
@@ -129,7 +130,7 @@ class MedicationListView extends StatelessWidget {
   Widget _buildMedicationList(
     BuildContext context,
     MedicationListViewModel viewModel,
-    List<MedicationModel> medications,
+    List<Med> medications,
     String emptyMessage,
     bool isActiveTab,
   ) {
@@ -204,7 +205,7 @@ class EmptyMedicationState extends StatelessWidget {
 
 // Medication Card
 class MedicationCard extends StatelessWidget {
-  final MedicationModel medication;
+  final Med medication;
   final MedicationListViewModel viewModel;
   final bool isActive;
 
@@ -275,7 +276,7 @@ class MedicationCard extends StatelessWidget {
                 // Medication name
                 Expanded(
                   child: Text(
-                    medication.medicationName ?? 'Unknown',
+                    medication.name,
                     style: theme.textTheme.titleMedium,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -295,7 +296,7 @@ class MedicationCard extends StatelessWidget {
 }
 
 class MedicationActions extends StatelessWidget {
-  final MedicationModel medication;
+  final Med medication;
   final MedicationListViewModel viewModel;
 
   const MedicationActions(
