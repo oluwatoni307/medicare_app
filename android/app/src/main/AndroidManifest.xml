@@ -86,7 +86,8 @@
         <service
             android:name="androidx.work.impl.background.systemalarm.SystemAlarmService"
             android:enabled="true"
-            android:exported="false" />
+            android:exported="false"
+            tools:replace="android:enabled" />
 
         <!-- Main Activity with enhanced notification handling -->
         <activity
@@ -176,5 +177,3 @@
             <action android:name="android.settings.NOTIFICATION_SETTINGS" />
         </intent>
     </queries>
-
-</manifest>

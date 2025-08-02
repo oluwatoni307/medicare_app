@@ -239,7 +239,7 @@ Future<_SchedulingResult> _processMedicationScheduling(
 
     return _SchedulingResult.success(scheduledCount);
     
-  } catch (e, stack) {
+  } catch (e) {
     debugPrint("Error processing medication ${medication.name}: $e");
     return _SchedulingResult.failure("Exception: $e");
   }
@@ -322,14 +322,14 @@ Future<void> initializeWorkManager() async {
     await Workmanager().cancelAll();
     debugPrint("Cancelled all existing WorkManager tasks.");
 
-    // UPDATED: Better constraints for daily scheduling reliability
+    // UPDATED: Better constraints for daily scheduling reliability (WorkManager 0.9.0+ API)
     await Workmanager().registerPeriodicTask(
       "daily_notification_task_1",
       dailyNotificationTask,
       frequency: const Duration(hours: 24),
       initialDelay: _calculateInitialDelay(),
       constraints: Constraints(
-        networkType: NetworkType.not_required,
+        networkType: NetworkType.notRequired, // Updated enum value
         requiresBatteryNotLow: false, // Important: don't require high battery
         requiresCharging: false,
         requiresDeviceIdle: false, // Important: can run when device is active
@@ -338,7 +338,7 @@ Future<void> initializeWorkManager() async {
       inputData: const <String, dynamic>{},
       backoffPolicy: BackoffPolicy.exponential,
       backoffPolicyDelay: const Duration(minutes: 15),
-      existingWorkPolicy: ExistingWorkPolicy.replace,
+      existingWorkPolicy: ExistingPeriodicWorkPolicy.update, // Updated for periodic tasks
     );
     
     final delay = _calculateInitialDelay();
@@ -373,7 +373,7 @@ Future<void> runDailyNotificationTaskNow() async {
       dailyNotificationTask,
       initialDelay: const Duration(seconds: 5),
       constraints: Constraints(
-        networkType: NetworkType.not_required,
+        networkType: NetworkType.notRequired,
         requiresBatteryNotLow: false,
         requiresCharging: false,
         requiresDeviceIdle: false,
