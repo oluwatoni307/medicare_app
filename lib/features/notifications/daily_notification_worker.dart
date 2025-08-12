@@ -103,21 +103,21 @@ Future<void> _cleanupBackgroundHive() async {
     // Don't rethrow cleanup errors
   }
 }
-
-// --- 5. Permission validation ---
 Future<bool> _validateNotificationPermissions() async {
   try {
     final notificationStatus = await Permission.notification.status;
     final exactAlarmStatus = await Permission.scheduleExactAlarm.status;
     
+    debugPrint("📱 Notification permission: $notificationStatus");
+    debugPrint("⏰ Exact alarm permission: $exactAlarmStatus");
+    
     return notificationStatus.isGranted && 
-           (exactAlarmStatus.isGranted || exactAlarmStatus.isLimited);
+           (exactAlarmStatus.isGranted || exactAlarmStatus.isLimited || exactAlarmStatus.isRestricted);
   } catch (e) {
     debugPrint("Error checking permissions: $e");
     return false;
   }
 }
-
 // --- 6. Core scheduling logic - UPDATED for "today" instead of "tomorrow" ---
 Future<bool> _scheduleTodaysNotifications() async {
   debugPrint("Starting notification scheduling for TODAY...");

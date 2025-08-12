@@ -72,47 +72,53 @@ class SecondPage extends StatelessWidget {
     );
   }
 }
-// --- NEW WIDGET WITH IMPROVED AESTHETICS ---
 class ScheduleTimesWidget extends StatelessWidget {
   final List<TimeOfDay> selectedTimes;
   final ValueChanged<List<TimeOfDay>> onTimesUpdated;
   final VoidCallback onAddTime;
+  final int maxOptions;
 
   const ScheduleTimesWidget({
     Key? key,
     required this.selectedTimes,
     required this.onTimesUpdated,
     required this.onAddTime,
-  }) : super(key: key);
+    this.maxOptions = 3, // default limit
+  })  : assert(maxOptions > 0),
+        super(key: key);
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
+    final canAdd = selectedTimes.length < maxOptions;
+    // If parent accidentally passes more than max, show only the first maxOptions.
+    final displayedTimes = selectedTimes.length <= maxOptions
+        ? selectedTimes
+        : selectedTimes.sublist(0, maxOptions);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Display selected times with remove buttons
         if (selectedTimes.isNotEmpty)
           SizedBox(
-            // Adjust height based on content or use IntrinsicHeight?
-            // Let's use a Wrap for better flow on smaller screens
             width: double.infinity,
             child: Wrap(
-              spacing: 8.0, // gap between chips
-              runSpacing: 4.0, // gap between lines
-              children: selectedTimes.map((time) {
+              spacing: 8.0,
+              runSpacing: 4.0,
+              children: displayedTimes.map((time) {
                 return InputChip(
                   label: Text(time.format(context)),
                   onDeleted: () {
-                    final newTimes = List<TimeOfDay>.from(selectedTimes)..remove(time);
+                    final newTimes =
+                        List<TimeOfDay>.from(selectedTimes)..remove(time);
                     onTimesUpdated(newTimes);
                   },
                   deleteIcon: const Icon(Icons.close, size: 18),
-                  // Style the chip to match your app's theme
                   backgroundColor: colorScheme.primaryContainer,
-                  deleteIconColor: colorScheme.onPrimaryContainer.withOpacity(0.7),
+                  deleteIconColor:
+                      colorScheme.onPrimaryContainer.withOpacity(0.7),
                   labelStyle: theme.textTheme.labelLarge?.copyWith(
                     color: colorScheme.onPrimaryContainer,
                   ),
@@ -124,56 +130,90 @@ class ScheduleTimesWidget extends StatelessWidget {
                     ),
                   ),
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 );
               }).toList(),
             ),
           ),
 
-        const SizedBox(height: 10),
-
-        // Add Time Button - Styled like TimePickerWidget
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onAddTime,
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              height: 48, // Match TimePickerWidget height
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: colorScheme.surface, // Match TimePickerWidget
-                border: Border.all(
-                  color: colorScheme.outline, // Match TimePickerWidget
-                  width: 1.5,
-                ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.add, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Add Time',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.primary, // Make it look actionable
-                    ),
-                  ),
-                  const Spacer(),
-                  Icon(
-                    Icons.access_time, // Use time icon for consistency
-                    size: 20,
-                    color: colorScheme.onSurface.withOpacity(0.7),
-                  ),
-                ],
+        if (selectedTimes.length > maxOptions)
+          Padding(
+            padding: const EdgeInsets.only(top: 6.0),
+            child: Text(
+              'Showing first $maxOptions of ${selectedTimes.length} selected',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.error,
               ),
             ),
           ),
+
+        const SizedBox(height: 10),
+
+        // Row with Add button + counter
+        Row(
+          children: [
+            Expanded(
+              child: Material(
+                color: Colors.transparent,
+                child: AbsorbPointer(
+                  absorbing: !canAdd, // prevent tapping when at limit
+                  child: Opacity(
+                    opacity: canAdd ? 1.0 : 0.55, // visual disabled state
+                    child: InkWell(
+                      onTap: canAdd ? onAddTime : null,
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        height: 48,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: colorScheme.surface,
+                          border: Border.all(
+                            color: colorScheme.outline,
+                            width: 1.5,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.add, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Add Time',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: colorScheme.primary,
+                              ),
+                            ),
+                            const Spacer(),
+                            Icon(
+                              Icons.access_time,
+                              size: 20,
+                              color:
+                                  colorScheme.onSurface.withOpacity(0.7),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(width: 8),
+
+            // small counter: "1/3"
+            Text(
+              '${selectedTimes.length}/$maxOptions',
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
         ),
       ],
     );
   }
 }
+
 // --- END NEW WIDGET ---
 
 // ... (Keep CalendarWidget, DurationDropdown, TimePickerWidget as they are, 

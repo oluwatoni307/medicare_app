@@ -140,15 +140,42 @@ class NotificationService {
 
       // Initialize with modern callback handling
       final initialized = await _notifications.initialize(
-        initSettings,
-        onDidReceiveNotificationResponse: _handleNotificationResponse,
-        onDidReceiveBackgroundNotificationResponse: _handleBackgroundNotificationResponse,
-      );
-
+  initSettings,
+  onDidReceiveNotificationResponse: _handleNotificationResponse,
+  onDidReceiveBackgroundNotificationResponse: _handleBackgroundNotificationResponse,
+);
       if (initialized != true) {
         return NotificationError('Failed to initialize notifications');
       }
+// *** CRITICAL: CREATE NOTIFICATION CHANNELS FOR ANDROID ***
+final androidPlugin = _notifications.resolvePlatformSpecificImplementation<
+    AndroidFlutterLocalNotificationsPlugin>();
 
+if (androidPlugin != null) {
+  // Main medicine reminder channel
+  const AndroidNotificationChannel mainChannel = AndroidNotificationChannel(
+    'medicine_reminders',
+    'Medicine Reminders',
+    description: 'Notifications for medicine schedules',
+    importance: Importance.high,
+    playSound: true,
+    enableVibration: true,
+  );
+  
+  // Quick feedback channel
+  const AndroidNotificationChannel feedbackChannel = AndroidNotificationChannel(
+    'quick_feedback',
+    'Quick Feedback',
+    description: 'Brief confirmations and test results',
+    importance: Importance.low,
+    playSound: false,
+  );
+
+  await androidPlugin.createNotificationChannel(mainChannel);
+  await androidPlugin.createNotificationChannel(feedbackChannel);
+  
+  developer.log('Android notification channels created');
+}
       // Load settings after successful initialization
       await _loadSettings();
 
@@ -167,64 +194,90 @@ class NotificationService {
       return NotificationError('Initialization failed', e);
     }
   }
-
-  /// Request permissions with modern permission handling
-  Future<NotificationResult> requestPermissions() async {
-    try {
-      // Request basic notification permission
-      final notificationStatus = await Permission.notification.request();
-
-      if (!notificationStatus.isGranted) {
-        return NotificationError('Notification permission denied');
-      }
-
-      // Request platform-specific permissions
-      bool platformPermissionsGranted = true;
-
-      // iOS/macOS specific permissions
-      final iosPlugin = _notifications
-          .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>();
-      
-      if (iosPlugin != null) {
-        platformPermissionsGranted = await iosPlugin.requestPermissions(
-          alert: true,
-          badge: true,
-          sound: true,
-          critical: false,
-        ) ?? false;
-      }
-
-      final macOSPlugin = _notifications
-          .resolvePlatformSpecificImplementation<MacOSFlutterLocalNotificationsPlugin>();
-      
-      if (macOSPlugin != null) {
-        platformPermissionsGranted = await macOSPlugin.requestPermissions(
-          alert: true,
-          badge: true,
-          sound: true,
-          critical: false,
-        ) ?? false;
-      }
-
-      // Android 13+ specific permissions
-      if (await Permission.scheduleExactAlarm.isDenied) {
-        await Permission.scheduleExactAlarm.request();
-      }
-
-      return platformPermissionsGranted
-          ? NotificationSuccess('All permissions granted')
-          : NotificationError('Some platform permissions denied');
-
-    } on Exception catch (e, stackTrace) {
-      developer.log(
-        'Failed to request permissions',
-        error: e,
-        stackTrace: stackTrace,
-      );
-      return NotificationError('Permission request failed', e);
+Future<NotificationResult> requestPermissions() async {
+  try {
+    developer.log('Starting Android permission request...');
+    
+    // Check current status first
+    final currentStatus = await Permission.notification.status;
+    developer.log('Current notification permission: $currentStatus');
+    
+    if (currentStatus.isGranted) {
+      return await _requestAndroidSpecificPermissions();
     }
-  }
+    
+    if (currentStatus.isPermanentlyDenied) {
+      return NotificationError(
+        'Notification permission permanently denied. Enable in Settings > Apps > MediCare App > Notifications'
+      );
+    }
 
+    // Request permission using Android plugin (primary method for Android 13+)
+    bool permissionGranted = false;
+    
+    final androidPlugin = _notifications.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    
+    if (androidPlugin != null) {
+      developer.log('Requesting permission via Android plugin...');
+      final granted = await androidPlugin.requestNotificationsPermission();
+      permissionGranted = granted == true;
+      developer.log('Android plugin permission result: $granted');
+    }
+    
+    // Fallback to permission_handler
+    if (!permissionGranted) {
+      developer.log('Using permission_handler fallback...');
+      final status = await Permission.notification.request();
+      permissionGranted = status.isGranted;
+      
+      if (status.isPermanentlyDenied) {
+        return NotificationError(
+          'Permission denied. Enable in Settings > Apps > MediCare App > Notifications'
+        );
+      }
+    }
+
+    // Verify final status
+    final finalStatus = await Permission.notification.status;
+    developer.log('Final permission status: $finalStatus');
+    
+    if (!finalStatus.isGranted && !permissionGranted) {
+      return NotificationError('Notification permission not granted');
+    }
+
+    return await _requestAndroidSpecificPermissions();
+
+  } catch (e, stackTrace) {
+    developer.log('Error requesting permissions', error: e, stackTrace: stackTrace);
+    return NotificationError('Permission request failed: $e');
+  }
+}
+
+/// Request Android-specific permissions
+Future<NotificationResult> _requestAndroidSpecificPermissions() async {
+  try {
+    // Android 12+ Exact Alarm Permission
+    if (await Permission.scheduleExactAlarm.isDenied) {
+      developer.log('Requesting exact alarm permission...');
+      final exactAlarmStatus = await Permission.scheduleExactAlarm.request();
+      
+      if (!exactAlarmStatus.isGranted) {
+        developer.log('Exact alarm permission denied - notifications may be delayed');
+        return NotificationError(
+          'For precise medication reminders, please enable "Alarms & reminders" in Settings > Apps > MediCare App'
+        );
+      }
+    }
+
+    developer.log('All Android permissions granted');
+    return NotificationSuccess('All permissions granted');
+    
+  } catch (e, stackTrace) {
+    developer.log('Error requesting Android-specific permissions', error: e, stackTrace: stackTrace);
+    return NotificationError('Android permission request failed: $e');
+  }
+}
   /// DEMO FIX 1: Add comprehensive test notification method
   Future<NotificationResult> scheduleTestNotification() async {
     if (!_settings.notificationsEnabled) {
@@ -463,7 +516,48 @@ class NotificationService {
 
     return notifications;
   }
+/// Create notification actions with proper payload storage
+Future<List<AndroidNotificationAction>> _createNotificationActions(
+  int notificationId, 
+  NotificationModel notification,
+) async {
+  // Create payloads for action buttons
+  final takenActionId = 'TAKEN_$notificationId';
+  final missedActionId = 'MISSED_$notificationId';
+  
+  final takenPayload = Uri(queryParameters: {
+    'action': NotificationAction.taken.value,
+    'medicineId': notification.medicineId,
+    'scheduleId': notification.scheduleId,
+    'date': notification.scheduledTime.dateString,
+    'notificationId': notification.id,
+  }).query;
 
+  final missedPayload = Uri(queryParameters: {
+    'action': NotificationAction.missed.value,
+    'medicineId': notification.medicineId,
+    'scheduleId': notification.scheduleId,
+    'date': notification.scheduledTime.dateString,
+    'notificationId': notification.id,
+  }).query;
+
+  // Store payloads for action buttons
+  await _storeNotificationPayload(takenActionId.hashCode.abs() % 2147483647, takenPayload);
+  await _storeNotificationPayload(missedActionId.hashCode.abs() % 2147483647, missedPayload);
+
+  return [
+    AndroidNotificationAction(
+      takenActionId,
+      '✅ Taken',
+      titleColor: const Color.fromARGB(255, 0, 150, 0),
+    ),
+    AndroidNotificationAction(
+      missedActionId,
+      '❌ Missed',  
+      titleColor: const Color.fromARGB(255, 200, 0, 0),
+    ),
+  ];
+}
   /// DEMO FIX 2: Schedule single notification with improved ID generation and payload handling
   Future<NotificationResult> _scheduleNotification(
     NotificationModel notification, {
@@ -486,59 +580,25 @@ class NotificationService {
       // DEMO FIX 3: Store payload BEFORE scheduling to prevent race condition
       await _storeNotificationPayload(notificationId, mainPayload);
 
-      // Create comprehensive notification details for demo
-      final androidDetails = AndroidNotificationDetails(
-        'medicine_reminders',
-        'Medicine Reminders',
-        channelDescription: isTestNotification 
-          ? 'Test notifications for medicine schedules'
-          : 'Notifications for medicine schedules',
-        importance: Importance.high,
-        priority: Priority.high,
-        playSound: _settings.soundEnabled,
-        enableVibration: _settings.vibrationEnabled,
-        category: AndroidNotificationCategory.reminder,
-        visibility: NotificationVisibility.public,
-        // Enhanced action buttons with better styling
-        actions: [
-          AndroidNotificationAction(
-            'TAKEN_${notificationId}',
-            '✅ Taken',
-            titleColor: const Color.fromARGB(255, 0, 150, 0),
-            icon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
-          ),
-          AndroidNotificationAction(
-            'MISSED_${notificationId}',
-            '❌ Missed',
-            titleColor: const Color.fromARGB(255, 200, 0, 0),
-            icon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
-          ),
-        ],
-        // Add custom LED color and pattern for demo effect
-        ledColor: const Color.fromARGB(255, 0, 255, 0),
-        ledOnMs: 1000,
-        ledOffMs: 500,
-        // Custom sound if available
-        sound: _settings.soundEnabled ? 
-          const RawResourceAndroidNotificationSound('notification_sound') : null,
-      );
-
-      // Enhanced iOS/macOS notification details
-      final darwinDetails = DarwinNotificationDetails(
-        presentAlert: true,
-        presentBadge: true,
-        presentSound: _settings.soundEnabled,
-        presentBanner: true,
-        presentList: true,
-        categoryIdentifier: isTestNotification ? 'TEST_MEDICINE_REMINDER' : 'MEDICINE_REMINDER',
-        threadIdentifier: notification.medicineId,
-        subtitle: isTestNotification ? 'Test Notification' : null,
-      );
+     final androidDetails = AndroidNotificationDetails(
+  'medicine_reminders',
+  'Medicine Reminders',
+  channelDescription: isTestNotification 
+    ? 'Test notifications for medicine schedules'
+    : 'Notifications for medicine schedules',
+  importance: Importance.high,
+  priority: Priority.high,
+  playSound: _settings.soundEnabled,
+  enableVibration: _settings.vibrationEnabled,
+  category: AndroidNotificationCategory.reminder,
+  visibility: NotificationVisibility.public,
+  // Store action payloads properly
+  actions: await _createNotificationActions(notificationId, notification),
+);
 
       final notificationDetails = NotificationDetails(
         android: androidDetails,
-        iOS: darwinDetails,
-        macOS: darwinDetails,
+    
       );
 
       // Schedule with improved timezone handling
@@ -563,7 +623,34 @@ class NotificationService {
       return NotificationError('Failed to schedule notification', e);
     }
   }
-
+/// Debug method to check current permission status
+Future<void> debugPermissionStatus() async {
+  try {
+    developer.log('=== PERMISSION DEBUG START ===');
+    
+    final notificationStatus = await Permission.notification.status;
+    developer.log('📱 Notification permission: $notificationStatus');
+    
+    final exactAlarmStatus = await Permission.scheduleExactAlarm.status;
+    developer.log('⏰ Exact alarm permission: $exactAlarmStatus');
+    
+    final androidPlugin = _notifications.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    
+    if (androidPlugin != null) {
+      final areEnabled = await androidPlugin.areNotificationsEnabled();
+      developer.log('🤖 Android notifications enabled: $areEnabled');
+    }
+    
+    final pendingCount = await getPendingNotificationsCount();
+    developer.log('📋 Pending notifications: $pendingCount');
+    
+    developer.log('=== PERMISSION DEBUG END ===');
+    
+  } catch (e, stackTrace) {
+    developer.log('Error in debug permissions', error: e, stackTrace: stackTrace);
+  }
+}
   /// DEMO FIX 2: Improved unique notification ID generation
   int _generateUniqueNotificationId(String notificationStringId) {
     // Use timestamp + hash for better uniqueness and collision prevention

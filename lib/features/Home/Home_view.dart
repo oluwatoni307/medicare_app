@@ -111,7 +111,6 @@ class _HomepageState extends State<Homepage> {
     );
   }
 }
-
 // ---------- Everything below is *unchanged* ----------
 class HeroSection extends StatelessWidget {
   const HeroSection({super.key});
@@ -130,8 +129,9 @@ class HeroSection extends StatelessWidget {
             child: Consumer<HomeViewModel>(
               builder: (context, viewModel, _) {
                 final count = viewModel.homepageData.upcomingMedicationCount;
+                final medicationText = count == 1 ? 'medication' : 'medications';
                 return Text(
-                  'You have $count medications to take\nregistered',
+                  'You have $count $medicationText to take\nregistered',
                   textAlign: TextAlign.right,
                   style: const TextStyle(
                     fontSize: 14,
@@ -146,7 +146,6 @@ class HeroSection extends StatelessWidget {
     );
   }
 }
-
 Widget storyText() {
   return  Padding(
     padding: EdgeInsets.all(10.0),

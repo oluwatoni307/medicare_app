@@ -19,7 +19,7 @@ class MedicationService {
   }
 
   /* ---------- CREATE ---------- */
-  Future<void> addMedication(MedicationModel med, String userId) async {
+  Future<String> addMedication(MedicationModel med, String userId) async {
     await _ensureInitialized(); // Ensure boxes are initialized
     try {
       final hiveMed = Med(
@@ -33,6 +33,7 @@ class MedicationService {
       );
 
       await _medsBox.add(hiveMed);
+      return hiveMed.id;
     } catch (e) {
       throw Exception('Add medication error: $e');
     }

@@ -46,6 +46,8 @@ class DailyTile {
     required this.time,
     required this.status,
   });
+
+  String? get date => null;
 }
 
 /// Represents a data point for the monthly adherence trend chart.
