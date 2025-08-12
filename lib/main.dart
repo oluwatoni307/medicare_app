@@ -17,7 +17,7 @@ String anonKey =
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initHive();
-  //  await initializeWorkManager(); // Function from daily_notification_worker.dart
+   await initializeWorkManager(); // Function from daily_notification_worker.dart
   
   try {
     await Supabase.initialize(
