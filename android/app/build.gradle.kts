@@ -7,7 +7,7 @@ plugins {
 android {
     namespace = "com.example.medstracker"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "27.0.12077973"  // Current stable version for Flutter plugins
 
     compileOptions {
         // bump to 1_8 (or 11) and enable desugaring
