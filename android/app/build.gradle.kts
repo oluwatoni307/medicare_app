@@ -22,7 +22,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.medstracker"
-        minSdk = flutter.minSdkVersion
+        minSdk = 23  // <- UPDATE THIS LINE (was flutter.minSdkVersion)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
