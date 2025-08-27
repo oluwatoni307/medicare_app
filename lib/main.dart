@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:medicare_app/data/hive_init.dart';
 import 'package:medicare_app/features/auth/auth_model.dart';
 import 'package:medicare_app/features/auth/service.dart';
+import 'package:medicare_app/features/notifications/service.dart';
 import 'package:provider/provider.dart';
 import './theme.dart';
 import 'features/notifications/daily_notification_worker.dart';
@@ -17,7 +18,9 @@ String anonKey =
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initHive();
-   await initializeWorkManager(); // Function from daily_notification_worker.dart
+  // await NotificationService.instance.init();
+
+  //  await initializeWorkManager(); // Function from daily_notification_worker.dart
   
   try {
     await Supabase.initialize(
@@ -27,6 +30,8 @@ Future<void> main() async {
   } catch (e) {
     print('Supabase initialization failed: $e');
   }
+    await registerDailyWorker();
+
   runApp(const MyApp());
 }
 
@@ -68,7 +73,7 @@ class MyApp extends StatelessWidget {
               title: 'Medstracker',
               theme: AppTheme.lightTheme,
               routes: AppRoutes.routes,
-              initialRoute: AppRoutes.home,
+              initialRoute: AppRoutes.splash,
             ),
           );
         }

@@ -31,43 +31,31 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   path: ^1.9.1
   path_provider: ^2.1.5
-  flutter_local_notifications: ^19.3.0
+  flutter_local_notifications: ^19.4.1
   timezone: ^0.10.1
   intl: ^0.20.2
   google_fonts: ^6.2.1
   provider: ^6.1.2
   table_calendar: ^3.1.2
-  sqflite: ^2.3.0
-  supabase_flutter: ^2.0.0
-  fl_chart: ^0.71.0
-  permission_handler: ^12.0.1
-  
-  # Timezone support for scheduled notifications
-  
-  
-  # Data persistence for settings
-  shared_preferences: ^2.2.3
-  
-  # State management (if not already added)
-  
-  # Background task processing
-  workmanager:  ^0.9.0
+  sqflite: ^2.4.2
+  supabase_flutter: ^2.9.1
+  fl_chart: ^1.0.0
+  awesome_notifications: ^0.10.1
 
-  
+  permission_handler: ^12.0.1
+  device_info_plus: ^11.5.0
+  shared_preferences: ^2.2.3
+  workmanager: ^0.7.0  # assumed per changelog
   sqlite3_flutter_libs: ^0.5.37
   connectivity_plus: ^6.1.4
   hive: ^2.2.3
   hive_flutter: ^1.1.0
-
   uuid: ^4.5.1
-  hive_generator:  # Use the latest version available
-  device_info_plus: ^11.5.0
-  # Also ensure build_runner is present
+  hive_generator: any
+  build_runner: any
 
 
 

@@ -581,7 +581,7 @@ class _WeeklyViewState extends State<WeeklyView> with TickerProviderStateMixin {
                   barTouchData: BarTouchData(
                     enabled: true,
                     touchTooltipData: BarTouchTooltipData(
-                      tooltipRoundedRadius: 8,
+                      tooltipBorderRadius: BorderRadius.circular(8.0),
                       tooltipPadding: const EdgeInsets.all(8),
                       getTooltipItem: (group, groupIndex, rod, rodIndex) {
                         final day = daysOfWeek[group.x];

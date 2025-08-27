@@ -1,4 +1,4 @@
-// notification_service.dart – medical grade with lean additions
+// notification_service.dart – medical grade
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -26,7 +26,7 @@ class NotificationService {
           ledColor: Colors.white,
           playSound: true,
           enableVibration: true,
-          criticalAlerts: true,           // iOS "critical" tier
+          criticalAlerts: true,           // iOS “critical” tier
           channelShowBadge: true,
           onlyAlertOnce: false,
         ),
@@ -38,7 +38,7 @@ class NotificationService {
     );
   }
 
-  /* ---------- existing API ---------- */
+  /* ---------- public API ---------- */
 
   Future<bool> schedule({
     required String medicineId,
@@ -62,6 +62,18 @@ class NotificationService {
           'date': at.toIso8601String().split('T').first,
         },
       ),
+      // actionButtons: [
+      //   NotificationActionButton(
+      //     key: 'taken_$id',
+      //     label: 'Taken',
+      //     actionType: ActionType.SilentAction,
+      //   ),
+      //   NotificationActionButton(
+      //     key: 'missed_$id',
+      //     label: 'Missed',
+      //     actionType: ActionType.SilentAction,
+      //   ),
+      // ],
       schedule: NotificationCalendar.fromDate(
         date: at,
         preciseAlarm: true,          // exact on Android 12+
@@ -76,35 +88,6 @@ class NotificationService {
         n.content?.payload?['medicineId'] == medicineId)) {
       await AwesomeNotifications().cancel(n.content!.id!);
     }
-  }
-
-  /* ---------- LEAN ADDITIONS ---------- */
-
-  /// Check if we have all needed permissions
-  Future<bool> get hasPermissions async {
-    final notifications = await AwesomeNotifications().isNotificationAllowed();
-    final exactAlarm = await Permission.scheduleExactAlarm.isGranted;
-    return notifications && exactAlarm;
-  }
-
-  /// Send immediate test notification
-  Future<bool> sendTest() async {
-    return AwesomeNotifications().createNotification(
-      content: NotificationContent(
-        id: DateTime.now().millisecondsSinceEpoch,
-        channelKey: _medChannel,
-        title: '💊 Test Reminder',
-        body: 'This is how your medicine reminders will look',
-        wakeUpScreen: true,
-        category: NotificationCategory.Reminder,
-      ),
-    );
-  }
-
-  /// Count scheduled notifications
-  Future<int> get scheduledCount async {
-    final list = await AwesomeNotifications().listScheduledNotifications();
-    return list.length;
   }
 
   /* ---------- internals ---------- */

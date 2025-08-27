@@ -203,7 +203,7 @@ class MonthlyView extends StatelessWidget {
                             enabled: true,
                             touchTooltipData: LineTouchTooltipData(
                               // tooltipBgColor: Theme.of(context).colorScheme.inverseSurface,
-                              tooltipRoundedRadius: 8,
+                      tooltipBorderRadius: BorderRadius.circular(8.0),
                               tooltipPadding: const EdgeInsets.all(8),
                               getTooltipItems: (touchedSpots) => touchedSpots.map((spot) {
                                 final day = viewModel.monthlyChartData[spot.x.toInt()];

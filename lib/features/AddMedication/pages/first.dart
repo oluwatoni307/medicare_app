@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../AddMedication_viewmodel.dart';
+import 'AddMedication_viewmodel.dart';
 
 class FirstPage extends StatefulWidget {
   const FirstPage({super.key});

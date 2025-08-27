@@ -4,6 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   app_links
+  awesome_notifications
   connectivity_plus
   permission_handler_windows
   sqlite3_flutter_libs

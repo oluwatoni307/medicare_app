@@ -31,9 +31,16 @@ class AnalysisViewModel extends ChangeNotifier {
 
   // Add this field to store the raw weekly data
   Map<String, double> _weeklyAdherenceData = {};
+  
+  // FIXED: Add field to store weekly medications independently
+  List<String> _weeklyMedications = [];
 
   // Add this getter
   Map<String, double> get weeklyAdherenceData => _weeklyAdherenceData;
+  
+  // FIXED: Add getter for weekly medications
+  List<String> get weeklyMedications => _weeklyMedications;
+  
   String _selectedView = 'Monthly'; // Current view (Daily, Weekly, Monthly)
   bool _isLoadingMonthly = false; // Loading state for monthly data
   bool _isLoadingWeekly = false; // Loading state for weekly data
@@ -212,6 +219,23 @@ class AnalysisViewModel extends ChangeNotifier {
         endDateStr,
       ); // No userId needed
       _weeklyAdherenceData = data;
+      
+      // FIXED: Load medication names during weekly data loading
+      // Get medication names from the first day of the week (or any representative day)
+      try {
+        final sampleDayTiles = await getDailyTileData(_currentWeekStart);
+        final medicationNames = <String>{};
+        
+        for (final tile in sampleDayTiles) {
+          medicationNames.add(tile.name);
+        }
+        
+        _weeklyMedications = medicationNames.toList();
+      } catch (e) {
+        // If we can't get medication names, set empty list
+        _weeklyMedications = [];
+      }
+      
       // --- END CHANGE ---
 
       // Check if this request is still current
@@ -223,9 +247,7 @@ class AnalysisViewModel extends ChangeNotifier {
 
       // For WeeklyInsight, we need to adapt:
       // overallAdherence: Average of the 7 daily averages
-      // totalMedications: Harder to determine from averages alone.
-      //                   We could approximate or change the model.
-      //                   Let's assume we can't easily get this from averages and set to 0 or N/A.
+      // totalMedications: Use the count from our newly loaded medication list
       // medicationAdherence: Also hard from averages. Could be empty or omitted.
 
       double overallSum = 0.0;
@@ -236,14 +258,8 @@ class AnalysisViewModel extends ChangeNotifier {
       }
       final overallAdherence = dayCount > 0 ? overallSum / dayCount : 0.0;
 
-      // Approximate total medications: This is a simplification.
-      // We don't have direct access to unique meds per day anymore.
-      // One way: Get all unique medication names from DailyTiles if loaded,
-      // or make an assumption. For now, let's leave it as 0 or find another way.
-      // Let's assume the service or a different call would be needed for this detail.
-      // Or, if the UI doesn't strictly need it, we can set it to 0 or omit.
-      // For this example, let's set it to 0 as we can't easily derive it.
-      final totalMedications = 0;
+      // FIXED: Use actual medication count from loaded medication names
+      final totalMedications = _weeklyMedications.length;
 
       // medicationAdherence map: We can't easily populate this from daily averages.
       // It required per-med data per day. We might need a different service call
@@ -253,14 +269,15 @@ class AnalysisViewModel extends ChangeNotifier {
 
       _weeklyInsight = WeeklyInsight(
         overallAdherence: overallAdherence,
-        totalMedications: totalMedications, // Simplified/Unavailable
-        medicationAdherence: medicationAdherence, // Simplified/Unavailable
+        totalMedications: totalMedications, // FIXED: Now uses actual count
+        medicationAdherence: medicationAdherence, // Still simplified/Unavailable
       );
       // --- END CHANGE ---
     } catch (e) {
       if (requestId == _requestCounter) {
         _error = 'Failed to load weekly data: ${e.toString()}';
         _weeklyInsight = null;
+        _weeklyMedications = []; // FIXED: Clear medications on error
       }
     } finally {
       if (requestId == _requestCounter) {

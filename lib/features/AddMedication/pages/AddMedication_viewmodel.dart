@@ -1,9 +1,11 @@
+// ignore_for_file: unused_element
+
 import 'package:flutter/material.dart';
-import '../notifications/notifications_model.dart';
-import 'AddMedication_model.dart';
-import '../auth/service.dart';
-import 'service.dart';
-import '../notifications/service.dart';
+// import '../notifications/notifications_model.dart';
+import '../AddMedication_model.dart';
+import '../../auth/service.dart';
+import '../service.dart';
+// import '../notifications/service.dart';
 
 class MedicationViewModel extends ChangeNotifier {
   final AuthService _authService = AuthService();
@@ -173,7 +175,7 @@ class MedicationViewModel extends ChangeNotifier {
       }
 
       // ✅ Schedule notifications after save
-      await _scheduleNotificationsForMedication();
+      // await _scheduleNotificationsForMedication();
 
       return true;
     } catch (e) {
@@ -190,47 +192,47 @@ class MedicationViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _scheduleNotificationsForMedication() async {
-    if (_medication.scheduleTimes == null ||
-        _medication.scheduleTimes!.isEmpty) {
-      return;
-    }
+  // Future<void> _scheduleNotificationsForMedication() async {
+  //   if (_medication.scheduleTimes == null ||
+  //       _medication.scheduleTimes!.isEmpty) {
+  //     return;
+  //   }
 
-    final user = _authService.getCurrentUser();
-    if (user == null) return;
+  //   final user = _authService.getCurrentUser();
+  //   if (user == null) return;
 
-    for (final time in _medication.scheduleTimes!) {
-      final schedule = ScheduleNotificationModel(
-        scheduleId:
-            _medication.id ?? 'temp_${DateTime.now().millisecondsSinceEpoch}',
-        medicineId: _medication.id!,
-        medicineName: _medication.medicationName!,
-        dosage: _medication.dosage!,
-        time:
-            '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}',
-        startDate: _medication.startDate!,
-        endDate: _parseDurationToEndDate(
-          _medication.duration!,
-          _medication.startDate!,
-        ),
-      );
+  //   for (final time in _medication.scheduleTimes!) {
+  //     final schedule = ScheduleNotificationModel(
+  //       scheduleId:
+  //           _medication.id ?? 'temp_${DateTime.now().millisecondsSinceEpoch}',
+  //       medicineId: _medication.id!,
+  //       medicineName: _medication.medicationName!,
+  //       dosage: _medication.dosage!,
+  //       time:
+  //           '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}',
+  //       startDate: _medication.startDate!,
+  //       endDate: _parseDurationToEndDate(
+  //         _medication.duration!,
+  //         _medication.startDate!,
+  //       ),
+  //     );
 
-      final result = await NotificationService.instance
-          .scheduleNotificationsForSchedule(schedule);
+  //     final result = await NotificationService.instance
+  //         .scheduleNotificationsForSchedule(schedule);
 
-      // ✅ Immediately send a test notification
-      final testResult = await NotificationService.instance
-          .scheduleTestNotification();
-      if (testResult is NotificationSuccess) {
-        print('✅ Test notification scheduled');
-      } else if (testResult is NotificationError) {
-        print('❌ Test notification failed: ${testResult.message}');
-      }
-      if (result is NotificationError) {
-        print('Failed to schedule notification: ${result.message}');
-      }
-    }
-  }
+  //     // ✅ Immediately send a test notification
+  //     final testResult = await NotificationService.instance
+  //         .scheduleTestNotification();
+  //     if (testResult is NotificationSuccess) {
+  //       print('✅ Test notification scheduled');
+  //     } else if (testResult is NotificationError) {
+  //       print('❌ Test notification failed: ${testResult.message}');
+  //     }
+  //     if (result is NotificationError) {
+  //       print('Failed to schedule notification: ${result.message}');
+  //     }
+  //   }
+  // }
 
   DateTime _parseDurationToEndDate(String duration, DateTime startDate) {
     final lower = duration.toLowerCase();

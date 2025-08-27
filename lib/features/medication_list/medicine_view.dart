@@ -179,6 +179,8 @@ class _Calendar extends StatelessWidget {
           firstDay: vm.getStartDate().subtract(const Duration(days: 30)),
           lastDay: vm.getEndDate().add(const Duration(days: 30)),
           focusedDay: DateTime.now(),
+                    daysOfWeekHeight: 45.0,  // Increase from default ~25 to 45
+
           calendarFormat: CalendarFormat.month,
           startingDayOfWeek: StartingDayOfWeek.monday,
           headerStyle: const HeaderStyle(

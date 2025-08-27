@@ -1,7 +1,7 @@
 import 'package:table_calendar/table_calendar.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../AddMedication_viewmodel.dart' show MedicationViewModel;
+import 'AddMedication_viewmodel.dart' show MedicationViewModel;
 
 class SecondPage extends StatelessWidget {
   const SecondPage({super.key});
