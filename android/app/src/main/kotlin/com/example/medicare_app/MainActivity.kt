@@ -1,4 +1,4 @@
-package com.example.medicare_app
+package com.example.medstracker
 
 import io.flutter.embedding.android.FlutterActivity
 
