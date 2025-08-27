@@ -16,10 +16,7 @@ String supabaseUrl = "https://ucejrkydjqjymsepgsyz.supabase.co";
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Handle plugin messages before framework is ready
-  WidgetsBinding.instance.deferFirstFrame();
-  
+
   try {
     // Initialize Hive first
     await initHive();
@@ -37,7 +34,7 @@ Future<void> main() async {
     
     // Register daily worker (with error handling)
     try {
-      await registerDailyWorker();
+      // await registerDailyWorker();
       print('✅ Daily worker registered successfully');
     } catch (e) {
       print('⚠️ Daily worker registration failed: $e');
@@ -52,7 +49,6 @@ Future<void> main() async {
   }
 
   // Allow the first frame to be drawn
-  WidgetsBinding.instance.allowFirstFrame();
 
   runApp(const MyApp());
 }
