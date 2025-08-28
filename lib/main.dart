@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:medicare_app/data/hive_init.dart';
-import 'package:medicare_app/features/auth/auth_model.dart';
+// import 'package:medicare_app/features/auth/auth_model.dart';
 import 'package:medicare_app/features/auth/service.dart';
 import 'package:medicare_app/features/auth/auth_viewmodel.dart';
 import 'package:medicare_app/features/notifications/service.dart';
@@ -26,7 +26,7 @@ Future<void> main() async {
     print('✅ Hive initialized successfully');
     
     // Initialize notifications (uncomment when ready)
-    // await NotificationService.instance.init();
+    await NotificationService.instance.init();
     
     // Initialize Supabase
     await Supabase.initialize(
