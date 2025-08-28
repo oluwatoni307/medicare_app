@@ -8,41 +8,64 @@ class DBhelper {
   static final DBhelper _instance = DBhelper._internal();
   
   // Hive boxes
-  late Box<Med> _medsBox;
-  late Box<LogModel> _logsBox;
-    bool _isInitialized = false; // Track if init was called
-
+  Box<Med>? _medsBox;
+  Box<LogModel>? _logsBox;
+  bool _isInitialized = false; // Track if init was called
 
   DBhelper._internal();
 
   factory DBhelper() => _instance;
 
   // Initialize Hive boxes - call this during app startup
-  // This will be called automatically before any method runs
   Future<void> _initIfNotDone() async {
     if (_isInitialized) return;
 
-    _medsBox = Hive.box<Med>('meds');
-    _logsBox = Hive.box<LogModel>('logs');
-    _isInitialized = true;
+    try {
+      // Ensure Hive is initialized first
+      if (!Hive.isBoxOpen('meds')) {
+        _medsBox = await Hive.openBox<Med>('meds');
+      } else {
+        _medsBox = Hive.box<Med>('meds');
+      }
 
-    print("✅ DBhelper: Ready! Meds box size: ${_medsBox.length}, Logs: ${_logsBox.length}");
+      if (!Hive.isBoxOpen('logs')) {
+        _logsBox = await Hive.openBox<LogModel>('logs');
+      } else {
+        _logsBox = Hive.box<LogModel>('logs');
+      }
+
+      _isInitialized = true;
+      print("✅ DBhelper: Ready! Meds box size: ${_medsBox!.length}, Logs: ${_logsBox!.length}");
+    } catch (e) {
+      print("❌ DBhelper initialization failed: $e");
+      rethrow;
+    }
   }
+
+  // Public method to ensure initialization (call this from main.dart)
+  Future<void> initialize() async {
+    await _initIfNotDone();
+  }
+
   // Get homepage data for a specific user
   Future<HomepageData> getHomepageData(String userId) async {
-    _initIfNotDone();
+    await _initIfNotDone(); // ✅ Properly await initialization
+    
     try {
       final upcomingMeds = await _getUpcomingMedicinesWithType(userId);
       final medications = upcomingMeds
           .map((med) => MedicationInfo.fromMap(med))
           .toList();
 
-      return HomepageData(
+      final result = HomepageData(
         upcomingMedicationCount: medications.length,
         medications: medications,
       );
+
+      print("📊 Homepage data loaded: ${medications.length} medications");
+      return result;
     } catch (e) {
-      print('Error in getHomepageData: $e');
+      print('❌ Error in getHomepageData: $e');
       return HomepageData.initial();
     }
   }
@@ -50,7 +73,13 @@ class DBhelper {
   // Get upcoming medicines with type from local Hive data
   Future<List<Map<String, dynamic>>> _getUpcomingMedicinesWithType(String userId) async {
     try {
-      print("Fetching medicines for user: $userId (Local Hive)");
+      if (_medsBox == null) {
+        print("❌ Meds box is null!");
+        return [];
+      }
+
+      print("📋 Fetching medicines for user: $userId (Local Hive)");
+      print("📦 Total medicines in box: ${_medsBox!.length}");
       
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
@@ -58,7 +87,9 @@ class DBhelper {
       Set<String> uniqueMedicineIds = {};
       List<Map<String, dynamic>> result = [];
       
-      for (final med in _medsBox.values) {
+      for (final med in _medsBox!.values) {
+        print("🔍 Checking medicine: ${med.name} (ID: ${med.id})");
+        
         // Check if medication is active today based on startAt and endAt dates
         if (_isMedicationActiveOnDate(med, today)) {
           if (!uniqueMedicineIds.contains(med.id)) {
@@ -68,54 +99,73 @@ class DBhelper {
               'name': med.name,
               'type': med.type,
             });
+            print("✅ Added medicine: ${med.name}");
+          } else {
+            print("⏭️  Skipped duplicate: ${med.name}");
           }
+        } else {
+          print("❌ Medicine not active today: ${med.name}");
         }
       }
       
-      print('Transformed result with unique IDs: $result');
+      print('📊 Final result with unique IDs: $result');
       return result;
     } catch (e) {
-      print('Error fetching upcoming medicines: $e');
+      print('❌ Error fetching upcoming medicines: $e');
       rethrow;
     }
   }
 
   Future<List<Map<String, dynamic>>> getAllUserMedicines(String userId) async {
+    await _initIfNotDone(); // Ensure initialization
+    
     try {
-      print("Fetching all medicines for user: $userId (Local Hive)");
+      if (_medsBox == null) {
+        print("❌ Meds box is null!");
+        return [];
+      }
+
+      print("📋 Fetching all medicines for user: $userId (Local Hive)");
       
       // Note: Hive Med model doesn't have user_id, so returning all meds
-      final result = _medsBox.values.map((med) => {
+      final result = _medsBox!.values.map((med) => {
         'id': med.id,
         'name': med.name,
         'type': med.type,
         'dosage': med.dosage,
       }).toList();
       
-      print('All medicines response: $result');
+      print('📊 All medicines response: $result');
       return result;
     } catch (e) {
-      print('Error fetching all medicines: $e');
+      print('❌ Error fetching all medicines: $e');
       rethrow;
     }
   }
 
   // Get medicines that need attention today (based on your plan)
   Future<List<Map<String, dynamic>>> getUpcomingMedicines(String userId) async {
+    await _initIfNotDone(); // Ensure initialization
+    
     try {
+      if (_medsBox == null || _logsBox == null) {
+        print("❌ Boxes are null!");
+        return [];
+      }
+
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
-      final currentTimeOfDay = TimeOfDay.fromDateTime(now); // Current time
+      final currentTimeOfDay = TimeOfDay.fromDateTime(now);
       
       final result = <Map<String, dynamic>>[];
       
-      for (final med in _medsBox.values) {
+      for (final med in _medsBox!.values) {
         // 1. Check if medication is active today based on date range
         if (_isMedicationActiveOnDate(med, today)) {
           // 2. Find existing log for this medicine and today
           LogModel? existingLog;
           try {
-            existingLog = _logsBox.values.firstWhere((log) => 
+            existingLog = _logsBox!.values.firstWhere((log) => 
               log.medId == med.id && 
               _isSameDay(log.date, today)
             );
@@ -123,10 +173,8 @@ class DBhelper {
             // No log found for this med today
           }
           
-          // 3. If no log exists, the medicine needs attention (per your plan)
-          //    If log exists but percent < 100, it also needs attention
+          // 3. If no log exists, the medicine needs attention
           if (existingLog == null || existingLog.percent < 100.0) {
-            // Determine status message based on time of day and schedule
             String statusMessage = 'Scheduled for today';
             
             // Check if any scheduled times have passed
@@ -142,7 +190,7 @@ class DBhelper {
 
             result.add({
               'id': med.id,
-              'time': statusMessage, // General status, not specific time
+              'time': statusMessage,
               'medicines': {
                 'name': med.name,
                 'dosage': med.dosage,
@@ -157,26 +205,31 @@ class DBhelper {
 
       return result;
     } catch (e) {
-      print('Error fetching upcoming medicines: $e');
+      print('❌ Error fetching upcoming medicines: $e');
       rethrow;
     }
   }
 
   // Get completed medicines for today (100% completed)
   Future<List<Map<String, dynamic>>> getCompletedMedicines(String userId) async {
+    await _initIfNotDone(); // Ensure initialization
+    
     try {
+      if (_medsBox == null || _logsBox == null) {
+        print("❌ Boxes are null!");
+        return [];
+      }
+
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
       
       final result = <Map<String, dynamic>>[];
       
-      for (final med in _medsBox.values) {
-        // 1. Check if medication is active today based on date range
+      for (final med in _medsBox!.values) {
         if (_isMedicationActiveOnDate(med, today)) {
-          // 2. Find existing log for this medicine and today
           LogModel? existingLog;
           try {
-            existingLog = _logsBox.values.firstWhere((log) => 
+            existingLog = _logsBox!.values.firstWhere((log) => 
               log.medId == med.id && 
               _isSameDay(log.date, today)
             );
@@ -184,7 +237,6 @@ class DBhelper {
             // No log found for this med today
           }
           
-          // 3. If log exists and percent is 100, it's completed
           if (existingLog != null && existingLog.percent >= 100.0) {
             result.add({
               'id': med.id,
@@ -200,21 +252,18 @@ class DBhelper {
               }
             });
           }
-          // If no log or percent < 100, it's not completed
         }
       }
 
       return result;
     } catch (e) {
-      print('Error fetching completed medicines: $e');
+      print('❌ Error fetching completed medicines: $e');
       rethrow;
     }
   }
 
   // Helper method to check if a medication is active on a specific date
-  // This only checks the date range (startAt to endAt), not specific times of day
   bool _isMedicationActiveOnDate(Med med, DateTime targetDate) {
-    // Check if targetDate is within the medication's active period
     final startDate = DateTime(med.startAt.year, med.startAt.month, med.startAt.day);
     
     if (startDate.isAfter(targetDate)) {
@@ -228,7 +277,6 @@ class DBhelper {
       }
     }
     
-    // If we passed the above checks, the medication is active on this date
     return true;
   }
 
@@ -247,8 +295,14 @@ class DBhelper {
   }
 
   Future<void> testDatabase() async {
-    print('Local Hive database is ready');
+    await _initIfNotDone();
+    print('🔧 Local Hive database is ready');
+    print('📊 Meds box size: ${_medsBox?.length ?? 0}');
+    print('📊 Logs box size: ${_logsBox?.length ?? 0}');
   }
+
+  // Method to check if boxes are properly initialized
+  bool get isInitialized => _isInitialized && _medsBox != null && _logsBox != null;
 }
 
 // Extension to format TimeOfDay (if not already defined globally)

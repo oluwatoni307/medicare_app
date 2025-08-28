@@ -81,21 +81,21 @@ class _HomepageState extends State<Homepage> {
 
                     // Real grid
                     return SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      sliver: SliverGrid.count(
-                        crossAxisCount: 3,
-                        crossAxisSpacing: 5,
-                        mainAxisSpacing: 5,
-                        childAspectRatio: 1.2, // wider cells
-                        children: viewModel.medications.map((med) {
-                          return MedicationBox(
-                            medicationId: med.id,
-                            medicationName: med.name,
-                            medicationImageUrl: med.imageUrl,
-                          );
-                        }).toList(),
-                      ),
-                    );
+  padding: const EdgeInsets.symmetric(horizontal: 10),
+  sliver: SliverGrid.count(
+    crossAxisCount: 3,
+    crossAxisSpacing: 5,
+    mainAxisSpacing: 5,
+    childAspectRatio: 1, // Changed from 1.2 to 0.9 (makes cards taller)
+    children: viewModel.medications.map((med) {
+      return MedicationBox(
+        medicationId: med.id,
+        medicationName: med.name,
+        medicationImageUrl: med.imageUrl,
+      );
+    }).toList(),
+  ),
+);
                   },
                 ),
 
@@ -304,7 +304,7 @@ class MedicationBox extends StatelessWidget {
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
-                maxLines: 2,
+                maxLines: 3,
                 overflow: TextOverflow.ellipsis,
               ),
             ],

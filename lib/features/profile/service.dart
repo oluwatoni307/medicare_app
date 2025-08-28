@@ -2,6 +2,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../sync.dart';
 import 'profile_model.dart';
 import '../auth/service.dart';
 import '/data/models/med.dart'; // Hive Med with List<TimeOfDay> scheduleTimes
@@ -158,32 +159,33 @@ class ProfileViewModel extends ChangeNotifier {
 
   /// Sign out user - clear Supabase session only
   Future<bool> signOut() async {
-    _isSigningOut = true;
-    _clearError();
+  _isSigningOut = true;
+  _clearError();
+  notifyListeners();
+  try {
+    print("Signing out user");
+   
+    // Backup data before signing out
+    await backupAllToSingleJson();
+   
+    // Sign out from Supabase (clears session)
+    await _client.auth.signOut();
+   
+    // Clear profile data
+    _profile = null;
+   
+    print("User signed out successfully");
+    return true;
+    
+  } catch (e) {
+    print('Error signing out: $e');
+    _setError('Failed to sign out: $e');
+    return false;
+  } finally {
+    _isSigningOut = false;
     notifyListeners();
-
-    try {
-      print("Signing out user");
-      
-      // Sign out from Supabase (clears session)
-      await _client.auth.signOut();
-      
-      // Clear profile data
-      _profile = null;
-      
-      print("User signed out successfully");
-      return true;
-      
-    } catch (e) {
-      print('Error signing out: $e');
-      _setError('Failed to sign out: $e');
-      return false;
-    } finally {
-      _isSigningOut = false;
-      notifyListeners();
-    }
   }
-
+}
   /// Clear any cached data
   void clearData() {
     _profile = null;

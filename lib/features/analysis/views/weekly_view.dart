@@ -13,9 +13,14 @@ class WeeklyView extends StatefulWidget {
   State<WeeklyView> createState() => _WeeklyViewState();
 }
 
-class _WeeklyViewState extends State<WeeklyView> with TickerProviderStateMixin {
+class _WeeklyViewState extends State<WeeklyView>
+    with TickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
+
+  // NEW: flags for pre-loading today's tiles
+  bool _todayLoaded = false;
+  bool _loadingTodayForTable = false;
 
   @override
   void initState() {
@@ -24,19 +29,31 @@ class _WeeklyViewState extends State<WeeklyView> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 600),
       vsync: this,
     );
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeInOut,
-    ));
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.easeInOut,
+      ),
+    );
+
+    // NEW: preload today's tiles once the frame is ready
+    WidgetsBinding.instance.addPostFrameCallback((_) => _preloadTodayTiles());
   }
 
   @override
   void dispose() {
     _animationController.dispose();
     super.dispose();
+  }
+
+  Future<void> _preloadTodayTiles() async {
+    final vm = Provider.of<AnalysisViewModel>(context, listen: false);
+    if (vm.dailyTiles.isEmpty) {
+      setState(() => _loadingTodayForTable = true);
+      await vm.loadTodayData();
+      setState(() => _loadingTodayForTable = false);
+    }
+    _todayLoaded = true;
   }
 
   @override
@@ -46,21 +63,14 @@ class _WeeklyViewState extends State<WeeklyView> with TickerProviderStateMixin {
   }
 
   Widget _buildContent(BuildContext context, AnalysisViewModel viewModel) {
-    // DEBUG: Print weekly data to console
-    print('WeeklyView - weeklyAdherenceData: ${viewModel.weeklyAdherenceData}');
-    print('WeeklyView - hasWeeklyData: ${viewModel.hasWeeklyData}');
-    print('WeeklyView - weeklyInsight: ${viewModel.weeklyInsight}');
-    
     if (viewModel.isLoadingWeekly) {
       return _buildLoadingState(context);
     }
-    
     if (viewModel.error != null) {
       return _buildErrorState(context, viewModel);
     }
 
     _animationController.forward();
-    
     return FadeTransition(
       opacity: _fadeAnimation,
       child: SingleChildScrollView(
@@ -76,34 +86,24 @@ class _WeeklyViewState extends State<WeeklyView> with TickerProviderStateMixin {
     );
   }
 
-  // FIXED: Better helper methods that work with actual available data
   List<String> _getEstimatedMedications(AnalysisViewModel viewModel) {
-    // Get medications from today's data as an estimate
-    // In a real implementation, this would come from the service
     final todayTiles = viewModel.dailyTiles;
     final medicationNames = <String>{};
-    
     for (final tile in todayTiles) {
       medicationNames.add(tile.name);
     }
-    
-
-    
     return medicationNames.toList();
   }
 
-  List<String?> _getEstimatedMedicationAdherence(String medName, AnalysisViewModel viewModel) {
-    // FIXED: Use actual weekly data with correct service keys
-    final serviceKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']; // Match service format
+  List<String?> _getEstimatedMedicationAdherence(
+      String medName, AnalysisViewModel viewModel) {
+    const serviceKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
     final adherence = <String?>[];
-    
     for (int i = 0; i < 7; i++) {
-      final dayKey = serviceKeys[i]; // Use lowercase keys that match service
+      final dayKey = serviceKeys[i];
       final dayPercentage = viewModel.weeklyAdherenceData[dayKey];
-      
-      // Handle null/missing data properly
       if (dayPercentage == null) {
-        adherence.add(null); // No data available
+        adherence.add(null);
       } else if (dayPercentage >= 80) {
         adherence.add('taken');
       } else if (dayPercentage >= 50) {
@@ -111,10 +111,9 @@ class _WeeklyViewState extends State<WeeklyView> with TickerProviderStateMixin {
       } else if (dayPercentage > 0) {
         adherence.add('not_logged');
       } else {
-        adherence.add(null); // No scheduled doses
+        adherence.add(null);
       }
     }
-    
     return adherence;
   }
 
@@ -178,18 +177,15 @@ class _WeeklyViewState extends State<WeeklyView> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildErrorState(BuildContext context, AnalysisViewModel viewModel) {
+  Widget _buildErrorState(
+      BuildContext context, AnalysisViewModel viewModel) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.error_outline,
-              size: 48,
-              color: Colors.red,
-            ),
+            Icon(Icons.error_outline, size: 48, color: Colors.red),
             const SizedBox(height: 16),
             Text(
               'Failed to load data',
@@ -231,13 +227,13 @@ class _WeeklyViewState extends State<WeeklyView> with TickerProviderStateMixin {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Week Navigation
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   IconButton(
                     onPressed: viewModel.goToPreviousWeek,
-                    icon: Icon(Icons.chevron_left, color: Colors.white, size: 28),
+                    icon: Icon(Icons.chevron_left,
+                        color: Colors.white, size: 28),
                   ),
                   Text(
                     viewModel.currentWeekString,
@@ -249,7 +245,8 @@ class _WeeklyViewState extends State<WeeklyView> with TickerProviderStateMixin {
                   ),
                   IconButton(
                     onPressed: viewModel.goToNextWeek,
-                    icon: Icon(Icons.chevron_right, color: Colors.white, size: 28),
+                    icon: Icon(Icons.chevron_right,
+                        color: Colors.white, size: 28),
                   ),
                 ],
               ),
@@ -260,15 +257,22 @@ class _WeeklyViewState extends State<WeeklyView> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildMedicationTable(BuildContext context, AnalysisViewModel viewModel) {
-    // FIXED: Match service data format (lowercase)
-    final daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    final serviceKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']; // Service uses lowercase
-    
-    // FIXED: Use improved helper method
+  Widget _buildMedicationTable(
+      BuildContext context, AnalysisViewModel viewModel) {
+    const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    // NEW: show a tiny loader until today’s tiles are ready
+    if (!_todayLoaded || _loadingTodayForTable) {
+      return const Padding(
+        padding: EdgeInsets.all(32),
+        child: Center(
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+
     final medications = _getEstimatedMedications(viewModel);
-    
-    // FIXED: Better empty state handling
+
     if (medications.isEmpty || viewModel.weeklyAdherenceData.isEmpty) {
       return Container(
         margin: const EdgeInsets.all(16),
@@ -330,7 +334,6 @@ class _WeeklyViewState extends State<WeeklyView> with TickerProviderStateMixin {
               ),
             ),
           ),
-          // Table Header
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
@@ -365,20 +368,21 @@ class _WeeklyViewState extends State<WeeklyView> with TickerProviderStateMixin {
               ],
             ),
           ),
-          // Medication Rows
           ...medications.asMap().entries.map((entry) {
             final index = entry.key;
             final medName = entry.value;
             final medColor = _getMedicationColor(index);
-            final adherence = _getEstimatedMedicationAdherence(medName, viewModel);
-            
+            final adherence =
+                _getEstimatedMedicationAdherence(medName, viewModel);
+
             return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 border: Border(
-                  bottom: index < medications.length - 1 
-                    ? BorderSide(color: Colors.grey.shade200)
-                    : BorderSide.none,
+                  bottom: index < medications.length - 1
+                      ? BorderSide(color: Colors.grey.shade200)
+                      : BorderSide.none,
                 ),
               ),
               child: Row(
@@ -403,7 +407,9 @@ class _WeeklyViewState extends State<WeeklyView> with TickerProviderStateMixin {
                         const SizedBox(width: 8),
                         Flexible(
                           child: Text(
-                            medName.length > 8 ? '${medName.substring(0, 8)}...' : medName,
+                            medName.length > 8
+                                ? '${medName.substring(0, 8)}...'
+                                : medName,
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w500,
@@ -415,7 +421,7 @@ class _WeeklyViewState extends State<WeeklyView> with TickerProviderStateMixin {
                     ),
                   ),
                   ...adherence.asMap().entries.map((dayEntry) {
-                    final status = dayEntry.value; // 'taken', 'missed', 'not_logged', or null
+                    final status = dayEntry.value;
                     return Expanded(
                       child: Center(
                         child: Container(
@@ -438,13 +444,13 @@ class _WeeklyViewState extends State<WeeklyView> with TickerProviderStateMixin {
               ),
             );
           }),
-          // FIXED: Add disclaimer about estimated data
           if (medications.isNotEmpty)
             Container(
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline, size: 16, color: Colors.grey.shade600),
+                  Icon(Icons.info_outline,
+                      size: 16, color: Colors.grey.shade600),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -462,7 +468,6 @@ class _WeeklyViewState extends State<WeeklyView> with TickerProviderStateMixin {
       ),
     );
   }
-
   Widget _buildBarChart(BuildContext context, AnalysisViewModel viewModel) {
     // FIXED: Use correct day names and service keys
     const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];

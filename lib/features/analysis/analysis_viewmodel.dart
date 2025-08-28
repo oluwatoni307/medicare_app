@@ -296,6 +296,7 @@ class AnalysisViewModel extends ChangeNotifier {
     //   notifyListeners();
     //   return;
     // }
+  if (_dailyTiles.isNotEmpty) return;
 
     final requestId = ++_requestCounter;
     _isLoadingToday = true;

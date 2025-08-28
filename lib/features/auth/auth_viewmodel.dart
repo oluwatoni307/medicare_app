@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../sync.dart';
 import 'service.dart';
 import 'auth_model.dart';
 
@@ -7,7 +8,6 @@ class AuthViewModel extends ChangeNotifier {
 
   AuthViewModel(this._authService);
   
-
   bool _isLoading = false;
   String _errorMessage = '';
   UserModel? _user;
@@ -22,6 +22,7 @@ class AuthViewModel extends ChangeNotifier {
     notifyListeners();
     try {
       _user = await _authService.signUp(email, password);
+      // No need to restore on signup - new user has no data
       _isLoading = false;
       notifyListeners();
     } catch (e) {
@@ -37,6 +38,10 @@ class AuthViewModel extends ChangeNotifier {
     notifyListeners();
     try {
       _user = await _authService.signIn(email, password);
+      
+      // Try to restore user's data after successful sign in
+      await restoreFromSingleJson();
+      
       _isLoading = false;
       notifyListeners();
     } catch (e) {
@@ -46,13 +51,25 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> signOut() async {
+  Future<void> signOut(BuildContext context) async {
     _isLoading = true;
     _errorMessage = '';
     notifyListeners();
     try {
+      // Backup data before signing out
+      await backupAllToSingleJson();
+      
       await _authService.signOut();
       _user = null;
+      
+      // Navigate to login page
+      if (context.mounted) {
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          '/login', // Replace with your login route name
+          (route) => false,
+        );
+      }
+      
       _isLoading = false;
       notifyListeners();
     } catch (e) {

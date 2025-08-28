@@ -222,17 +222,18 @@ class MiniStats extends StatelessWidget {
     );
   }
 }
-
 /// === QUICK ACTIONS WIDGET ===
-/// Purpose: Notification settings and sign out buttons
+/// Purpose: Notification settings, backup medicine, and sign out buttons
 class QuickActions extends StatelessWidget {
   final VoidCallback onNotificationsTap;
+  final VoidCallback onBackupMedicineTap; // Added this line
   final VoidCallback onSignOutTap;
   final bool isSigningOut;
 
   const QuickActions({
     Key? key,
     required this.onNotificationsTap,
+    required this.onBackupMedicineTap, // Added this line
     required this.onSignOutTap,
     this.isSigningOut = false,
   }) : super(key: key);
@@ -282,6 +283,28 @@ class QuickActions extends StatelessWidget {
             subtitle: const Text('Manage reminders and alerts'),
             trailing: const Icon(Icons.arrow_forward_ios, size: 16),
             onTap: onNotificationsTap,
+          ),
+          
+          const Divider(height: 32),
+          
+          // Backup Medicine - Added this section
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.secondaryContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                Icons.backup,
+                color: Theme.of(context).colorScheme.onSecondaryContainer,
+              ),
+            ),
+            title: const Text('Backup Medicine'),
+            subtitle: const Text('Save your medicine data to cloud'),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+            onTap: onBackupMedicineTap,
           ),
           
           const Divider(height: 32),

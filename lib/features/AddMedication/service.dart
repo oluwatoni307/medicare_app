@@ -1,4 +1,5 @@
 import 'package:hive_flutter/hive_flutter.dart';
+import '../notifications/service.dart';
 import '/data/models/med.dart'; // Your updated Hive Med model
 import '/data/models/log.dart';
 import 'AddMedication_model.dart';
@@ -19,25 +20,36 @@ class MedicationService {
   }
 
   /* ---------- CREATE ---------- */
-  Future<String> addMedication(MedicationModel med, String userId) async {
-    await _ensureInitialized(); // Ensure boxes are initialized
-    try {
-      final hiveMed = Med(
-        id: med.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-        name: med.medicationName ?? '',
-        dosage: med.dosage ?? '',
-        type: med.type ?? '',
-        scheduleTimes: med.scheduleTimes ?? [], // Direct mapping - no conversion needed!
-        startAt: med.startDate!,
-        endAt: _calculateEndDate(med.startDate!, med.duration),
-      );
 
-      await _medsBox.add(hiveMed);
-      return hiveMed.id;
-    } catch (e) {
-      throw Exception('Add medication error: $e');
-    }
+Future<String> addMedication(MedicationModel med, String userId) async {
+  await _ensureInitialized();
+  try {
+    final hiveMed = Med(
+      id: med.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      name: med.medicationName ?? '',
+      dosage: med.dosage ?? '',
+      type: med.type ?? '',
+      scheduleTimes: med.scheduleTimes ?? [],
+      startAt: med.startDate!,
+      endAt: _calculateEndDate(med.startDate!, med.duration),
+    );
+
+    await _medsBox.add(hiveMed);
+
+    // === NEW: fire a single “success” notification 5 minutes after save ===
+    await NotificationService.instance.schedule(
+      medicineId: hiveMed.id,
+      scheduleId: '${hiveMed.id}_success',
+      name: hiveMed.name,
+      dosage: 'Saved – reminders will start soon',
+      at: DateTime.now().add(const Duration(minutes: 5)),
+    );
+
+    return hiveMed.id;
+  } catch (e) {
+    throw Exception('Add medication error: $e');
   }
+}
 
   /* ---------- READ ---------- */
   Future<List<MedicationModel>> getMedications(String userId) async {
