@@ -91,7 +91,7 @@ class NotificationService {
   Future<bool> sendTest() async {
     return AwesomeNotifications().createNotification(
       content: NotificationContent(
-        id: DateTime.now().millisecondsSinceEpoch,
+      id: 999999, // Simple fixed ID
         channelKey: _medChannel,
         title: '💊 Test Reminder',
         body: 'This is how your medicine reminders will look',
