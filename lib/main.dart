@@ -26,7 +26,7 @@ Future<void> main() async {
     print('✅ Hive initialized successfully');
     
     // Initialize notifications (uncomment when ready)
-    await NotificationService.instance.init();
+    // await NotificationService.instance.init();
     
     // Initialize Supabase
     await Supabase.initialize(
@@ -37,7 +37,7 @@ Future<void> main() async {
     
     // Register daily worker (with error handling)
     try {
-      await registerDailyWorker();
+      // await registerDailyWorker();
       print('✅ Daily worker registered successfully');
     } catch (e) {
       print('⚠️ Daily worker registration failed: $e');

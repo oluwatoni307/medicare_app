@@ -60,3 +60,4 @@ class ChartDataPoint {
     required this.value,
   });
 }
+

@@ -18,10 +18,6 @@ class _WeeklyViewState extends State<WeeklyView>
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
 
-  // NEW: flags for pre-loading today's tiles
-  bool _todayLoaded = false;
-  bool _loadingTodayForTable = false;
-
   @override
   void initState() {
     super.initState();
@@ -35,25 +31,12 @@ class _WeeklyViewState extends State<WeeklyView>
         curve: Curves.easeInOut,
       ),
     );
-
-    // NEW: preload today's tiles once the frame is ready
-    WidgetsBinding.instance.addPostFrameCallback((_) => _preloadTodayTiles());
   }
 
   @override
   void dispose() {
     _animationController.dispose();
     super.dispose();
-  }
-
-  Future<void> _preloadTodayTiles() async {
-    final vm = Provider.of<AnalysisViewModel>(context, listen: false);
-    if (vm.dailyTiles.isEmpty) {
-      setState(() => _loadingTodayForTable = true);
-      await vm.loadTodayData();
-      setState(() => _loadingTodayForTable = false);
-    }
-    _todayLoaded = true;
   }
 
   @override
@@ -86,35 +69,25 @@ class _WeeklyViewState extends State<WeeklyView>
     );
   }
 
-  List<String> _getEstimatedMedications(AnalysisViewModel viewModel) {
-    final todayTiles = viewModel.dailyTiles;
-    final medicationNames = <String>{};
-    for (final tile in todayTiles) {
-      medicationNames.add(tile.name);
-    }
-    return medicationNames.toList();
+  // FIXED: Use actual weekly medication data instead of estimating from today's data
+  List<String> _getWeeklyMedications(AnalysisViewModel viewModel) {
+    return viewModel.weeklyMedications;
   }
 
-  List<String?> _getEstimatedMedicationAdherence(
-      String medName, AnalysisViewModel viewModel) {
+  // FIXED: Use actual medication-specific adherence data
+  List<String?> _getMedicationAdherence(String medName, AnalysisViewModel viewModel) {
     const serviceKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-    final adherence = <String?>[];
-    for (int i = 0; i < 7; i++) {
-      final dayKey = serviceKeys[i];
-      final dayPercentage = viewModel.weeklyAdherenceData[dayKey];
-      if (dayPercentage == null) {
-        adherence.add(null);
-      } else if (dayPercentage >= 80) {
-        adherence.add('taken');
-      } else if (dayPercentage >= 50) {
-        adherence.add('missed');
-      } else if (dayPercentage > 0) {
-        adherence.add('not_logged');
-      } else {
-        adherence.add(null);
-      }
-    }
-    return adherence;
+    final medicationData = viewModel.weeklyMedicationData[medName];
+    
+    if (medicationData == null) return List.filled(7, null);
+    
+    return serviceKeys.map((dayKey) {
+      final percentage = medicationData[dayKey] ?? 0.0;
+      if (percentage >= 80) return 'taken';
+      if (percentage >= 20) return 'partial'; 
+      if (percentage >= 0.1) return 'missed';
+      return null; // No data/not active
+    }).toList();
   }
 
   Color _getMedicationColor(int index) {
@@ -134,12 +107,12 @@ class _WeeklyViewState extends State<WeeklyView>
     switch (status) {
       case 'taken':
         return Colors.green;
+      case 'partial':
+        return Colors.orange;
       case 'missed':
         return Colors.red;
-      case 'not_logged':
-        return Colors.orange;
       default:
-        return Colors.grey;
+        return Colors.grey.shade300;
     }
   }
 
@@ -147,10 +120,10 @@ class _WeeklyViewState extends State<WeeklyView>
     switch (status) {
       case 'taken':
         return Icons.check;
+      case 'partial':
+        return Icons.remove;
       case 'missed':
         return Icons.close;
-      case 'not_logged':
-        return Icons.remove;
       default:
         return Icons.help_outline;
     }
@@ -177,8 +150,7 @@ class _WeeklyViewState extends State<WeeklyView>
     );
   }
 
-  Widget _buildErrorState(
-      BuildContext context, AnalysisViewModel viewModel) {
+  Widget _buildErrorState(BuildContext context, AnalysisViewModel viewModel) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -257,23 +229,13 @@ class _WeeklyViewState extends State<WeeklyView>
     );
   }
 
-  Widget _buildMedicationTable(
-      BuildContext context, AnalysisViewModel viewModel) {
+  Widget _buildMedicationTable(BuildContext context, AnalysisViewModel viewModel) {
     const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-    // NEW: show a tiny loader until today’s tiles are ready
-    if (!_todayLoaded || _loadingTodayForTable) {
-      return const Padding(
-        padding: EdgeInsets.all(32),
-        child: Center(
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-      );
-    }
+    // FIXED: Use actual weekly medications instead of estimating from today's data
+    final medications = _getWeeklyMedications(viewModel);
 
-    final medications = _getEstimatedMedications(viewModel);
-
-    if (medications.isEmpty || viewModel.weeklyAdherenceData.isEmpty) {
+    if (medications.isEmpty || viewModel.weeklyMedicationData.isEmpty) {
       return Container(
         margin: const EdgeInsets.all(16),
         padding: const EdgeInsets.all(32),
@@ -298,7 +260,7 @@ class _WeeklyViewState extends State<WeeklyView>
             ),
             const SizedBox(height: 8),
             Text(
-              'Weekly medication details are not available yet.',
+              'No medications were tracked during this week.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Colors.grey.shade600,
               ),
@@ -346,9 +308,9 @@ class _WeeklyViewState extends State<WeeklyView>
             child: Row(
               children: [
                 SizedBox(
-                  width: 60,
+                  width: 80,
                   child: Text(
-                    'Med',
+                    'Medication',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
@@ -372,12 +334,11 @@ class _WeeklyViewState extends State<WeeklyView>
             final index = entry.key;
             final medName = entry.value;
             final medColor = _getMedicationColor(index);
-            final adherence =
-                _getEstimatedMedicationAdherence(medName, viewModel);
+            // FIXED: Use actual medication-specific adherence data
+            final adherence = _getMedicationAdherence(medName, viewModel);
 
             return Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 border: Border(
                   bottom: index < medications.length - 1
@@ -388,7 +349,7 @@ class _WeeklyViewState extends State<WeeklyView>
               child: Row(
                 children: [
                   SizedBox(
-                    width: 60,
+                    width: 80,
                     child: Row(
                       children: [
                         Container(
@@ -407,11 +368,11 @@ class _WeeklyViewState extends State<WeeklyView>
                         const SizedBox(width: 8),
                         Flexible(
                           child: Text(
-                            medName.length > 8
-                                ? '${medName.substring(0, 8)}...'
+                            medName.length > 10
+                                ? '${medName.substring(0, 10)}...'
                                 : medName,
                             style: TextStyle(
-                              fontSize: 10,
+                              fontSize: 11,
                               fontWeight: FontWeight.w500,
                             ),
                             overflow: TextOverflow.ellipsis,
@@ -444,22 +405,37 @@ class _WeeklyViewState extends State<WeeklyView>
               ),
             );
           }),
+          // UPDATED: More accurate legend
           if (medications.isNotEmpty)
             Container(
               padding: const EdgeInsets.all(16),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.info_outline,
-                      size: 16, color: Colors.grey.shade600),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Note: Individual medication data is estimated based on daily adherence.',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.grey.shade600,
-                        fontStyle: FontStyle.italic,
+                  Row(
+                    children: [
+                      Icon(Icons.info_outline,
+                          size: 16, color: Colors.grey.shade600),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Legend:',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.grey.shade600,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
-                    ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 4,
+                    children: [
+                      _buildLegendItem(Colors.green, Icons.check, 'Taken (≥80%)'),
+                      _buildLegendItem(Colors.orange, Icons.remove, 'Partial (20-79%)'),
+                      _buildLegendItem(Colors.red, Icons.close, 'Missed (<20%)'),
+                      _buildLegendItem(Colors.grey.shade300, Icons.help_outline, 'No data'),
+                    ],
                   ),
                 ],
               ),
@@ -468,12 +444,40 @@ class _WeeklyViewState extends State<WeeklyView>
       ),
     );
   }
+
+  Widget _buildLegendItem(Color color, IconData icon, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 16,
+          height: 16,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            icon,
+            color: Colors.white,
+            size: 10,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.grey.shade600,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildBarChart(BuildContext context, AnalysisViewModel viewModel) {
-    // FIXED: Use correct day names and service keys
     const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const serviceKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']; // Service uses lowercase
+    const serviceKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
     
-    // FIXED: Use actual weekly adherence data properly
     final weeklyData = viewModel.weeklyAdherenceData;
     
     return Container(
@@ -495,7 +499,7 @@ class _WeeklyViewState extends State<WeeklyView>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Relative Medication Adherence',
+              'Daily Average Adherence',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
@@ -506,7 +510,7 @@ class _WeeklyViewState extends State<WeeklyView>
               child: BarChart(
                 BarChartData(
                   alignment: BarChartAlignment.spaceAround,
-                  maxY: 100, // FIXED: Use actual percentage range
+                  maxY: 100,
                   minY: 0,
                   titlesData: FlTitlesData(
                     bottomTitles: AxisTitles(
@@ -534,14 +538,14 @@ class _WeeklyViewState extends State<WeeklyView>
                       sideTitles: SideTitles(
                         showTitles: true,
                         getTitlesWidget: (value, meta) => Text(
-                          value.toInt().toString(),
+                          '${value.toInt()}%',
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.grey.shade600,
                           ),
                         ),
-                        reservedSize: 28,
-                        interval: 20, // FIXED: Use proper interval for 0-100 range
+                        reservedSize: 32,
+                        interval: 20,
                       ),
                     ),
                     topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -550,7 +554,7 @@ class _WeeklyViewState extends State<WeeklyView>
                   gridData: FlGridData(
                     show: true,
                     drawVerticalLine: false,
-                    horizontalInterval: 20, // FIXED: Match left titles interval
+                    horizontalInterval: 20,
                     getDrawingHorizontalLine: (value) => FlLine(
                       color: Colors.grey.shade300,
                       strokeWidth: 0.5,
@@ -565,15 +569,19 @@ class _WeeklyViewState extends State<WeeklyView>
                   ),
                   barGroups: daysOfWeek.asMap().entries.map((entry) {
                     final index = entry.key;
-                    final dayKey = serviceKeys[index]; // Use service key format
-                    final value = weeklyData[dayKey] ?? 0.0; // FIXED: Use actual percentage
+                    final dayKey = serviceKeys[index];
+                    final value = weeklyData[dayKey] ?? 0.0;
                     
                     return BarChartGroupData(
                       x: index,
                       barRods: [
                         BarChartRodData(
                           toY: value,
-                          color: value >= 50.0 ? Colors.green : Colors.red, // FIXED: 50% threshold for percentage
+                          color: value >= 80.0 
+                              ? Colors.green 
+                              : value >= 50.0 
+                                  ? Colors.orange 
+                                  : Colors.red,
                           width: 20,
                           borderRadius: const BorderRadius.only(
                             topLeft: Radius.circular(2),
@@ -590,7 +598,7 @@ class _WeeklyViewState extends State<WeeklyView>
                       tooltipPadding: const EdgeInsets.all(8),
                       getTooltipItem: (group, groupIndex, rod, rodIndex) {
                         final day = daysOfWeek[group.x];
-                        final percentage = rod.toY.toInt(); // FIXED: Display actual percentage
+                        final percentage = rod.toY.toInt();
                         return BarTooltipItem(
                           '$day: $percentage%',
                           const TextStyle(

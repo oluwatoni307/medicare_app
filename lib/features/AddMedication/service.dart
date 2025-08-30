@@ -1,4 +1,6 @@
+import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import '../notifications/notifications_viewmodel.dart';
 import '../notifications/service.dart';
 import '/data/models/med.dart'; // Your updated Hive Med model
 import '/data/models/log.dart';
@@ -44,6 +46,8 @@ Future<String> addMedication(MedicationModel med, String userId) async {
       dosage: 'Saved – reminders will start soon',
       at: DateTime.now().add(const Duration(minutes: 5)),
     );
+  await _scheduleNotificationsForMed(hiveMed);
+
 
     return hiveMed.id;
   } catch (e) {
@@ -81,6 +85,10 @@ Future<String> addMedication(MedicationModel med, String userId) async {
           );
 
           await _medsBox.putAt(i, updatedMed);
+
+  // 🔥 ONLY ADDITION: Delete old + add new
+  await NotificationService.instance.cancelForMedicine(id);
+  await _scheduleNotificationsForMed(updatedMed);
           break;
         }
       }
@@ -94,6 +102,8 @@ Future<String> addMedication(MedicationModel med, String userId) async {
         await _ensureInitialized(); // Ensure boxes are initialized
 
     try {
+          await NotificationService.instance.cancelForMedicine(id);
+
       for (int i = 0; i < _medsBox.length; i++) {
         final med = _medsBox.getAt(i);
         if (med?.id == id) {
@@ -105,6 +115,40 @@ Future<String> addMedication(MedicationModel med, String userId) async {
       throw Exception('Delete medication error: $e');
     }
   }
+  
+
+
+
+// 🔥 ONE SIMPLE HELPER:
+Future<void> _scheduleNotificationsForMed(Med med) async {
+  try {
+    final dailyTimes = med.scheduleTimes
+        .map((t) => _parseTime(t as String))
+        .whereType<TimeOfDay>()
+        .toList();
+    
+    final days = med.endAt!.difference(med.startAt).inDays + 1;
+    
+    await NotificationService.instance.scheduleAllNotificationsForMedicine(
+      medicineId: med.id,
+      medicineName: med.name,
+      dosage: med.dosage,
+      dailyTimes: dailyTimes,
+      durationDays: days,
+    );
+  } catch (e) {
+    print('Notification scheduling failed: $e');
+  }
+}
+
+TimeOfDay? _parseTime(String timeStr) {
+  // Adjust based on your time string format
+  try {
+    final parts = timeStr.split(':');
+    return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+  } catch (e) {
+    return null;
+  }}
 
   /* ---------- LOG METHODS ---------- */
   // Future<void> addLog(String medId, DateTime date, double percent) async {
