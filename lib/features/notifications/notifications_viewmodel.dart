@@ -12,7 +12,7 @@ class NotificationViewModel extends ChangeNotifier {
   int _pendingCount = 0;
   
   // Global notification settings (would be persisted in real app)
-  bool _notificationsEnabled = false;
+  bool _notificationsEnabled = true;
   bool _soundEnabled = true;
   bool _vibrationEnabled = true;
   int _reminderMinutesBefore = 0; // 0, 5, 10, 15, 30, 60 minutes
@@ -275,11 +275,11 @@ class NotificationViewModel extends ChangeNotifier {
 
 Future<void> _loadSettingsFromStorage() async {
   final prefs = await SharedPreferences.getInstance();
-  _notificationsEnabled = prefs.getBool('notificationsEnabled') ?? false;
+  _notificationsEnabled = prefs.getBool('notificationsEnabled') ?? true;
   _soundEnabled = prefs.getBool('soundEnabled') ?? true;
   _vibrationEnabled = prefs.getBool('vibrationEnabled') ?? true;
   _reminderMinutesBefore = prefs.getInt('reminderMinutesBefore') ?? 0;
-  _missedDoseReminders = prefs.getBool('missedDoseReminders') ?? true;
+  _missedDoseReminders = prefs.getBool('missedDoseReminders') ?? false;
   _missedDoseDelayMinutes = prefs.getInt('missedDoseDelayMinutes') ?? 15;
   _maxMissedReminders = prefs.getInt('maxMissedReminders') ?? 2;
 }

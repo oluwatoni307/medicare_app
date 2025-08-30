@@ -122,12 +122,13 @@ Future<String> addMedication(MedicationModel med, String userId) async {
 // 🔥 ONE SIMPLE HELPER:
 Future<void> _scheduleNotificationsForMed(Med med) async {
   try {
-    final dailyTimes = med.scheduleTimes
-        .map((t) => _parseTime(t as String))
-        .whereType<TimeOfDay>()
-        .toList();
+    // Convert TimeOfDay list directly (no parsing needed)
+    final dailyTimes = med.scheduleTimes.cast<TimeOfDay>();
     
-    final days = med.endAt!.difference(med.startAt).inDays + 1;
+    print('Daily times: $dailyTimes'); // Debug
+    
+    final days = med.endAt?.difference(med.startAt).inDays ?? 7;
+    print('Days: $days'); // Debug
     
     await NotificationService.instance.scheduleAllNotificationsForMedicine(
       medicineId: med.id,
@@ -138,17 +139,10 @@ Future<void> _scheduleNotificationsForMed(Med med) async {
     );
   } catch (e) {
     print('Notification scheduling failed: $e');
+    rethrow; // Don't hide the error
   }
 }
 
-TimeOfDay? _parseTime(String timeStr) {
-  // Adjust based on your time string format
-  try {
-    final parts = timeStr.split(':');
-    return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
-  } catch (e) {
-    return null;
-  }}
 
   /* ---------- LOG METHODS ---------- */
   // Future<void> addLog(String medId, DateTime date, double percent) async {

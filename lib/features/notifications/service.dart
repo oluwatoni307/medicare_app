@@ -30,6 +30,8 @@ class NotificationService {
           criticalAlerts: true,           // iOS "critical" tier
           channelShowBadge: true,
           onlyAlertOnce: false,
+          locked: true,                  // ADD THIS - prevents user dismissal
+
         ),
       ],
     );
@@ -168,7 +170,7 @@ class NotificationService {
     // 🔥 LEAN: Read settings directly from SharedPreferences
     final p = await SharedPreferences.getInstance();
     final reminderMinutesBefore = p.getInt('reminderMinutesBefore') ?? 0;
-    final missedDoseReminders = p.getBool('missedDoseReminders') ?? true;
+    final missedDoseReminders = p.getBool('missedDoseReminders') ?? false;
     final missedDoseDelayMinutes = p.getInt('missedDoseDelayMinutes') ?? 15;
     final maxMissedReminders = p.getInt('maxMissedReminders') ?? 2;
 
