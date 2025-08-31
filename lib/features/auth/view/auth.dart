@@ -84,17 +84,18 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  void _authenticate() async {
-    final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
-    
-    if (_isSignUp) {
-      await authViewModel.signUp(_emailController.text, _passwordController.text);
-    } else {
-      await authViewModel.signIn(_emailController.text, _passwordController.text);
-    }
-    
-    if (authViewModel.user != null) {
-      Navigator.pushReplacementNamed(context, '/');
-    }
+void _authenticate() async {
+  final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
+  final isCurrentlySignUp = _isSignUp; // Add this line
+   
+  if (isCurrentlySignUp) { // Change _isSignUp to isCurrentlySignUp
+    await authViewModel.signUp(_emailController.text, _passwordController.text);
+  } else {
+    await authViewModel.signIn(_emailController.text, _passwordController.text);
   }
+   
+  if (authViewModel.user != null) {
+    Navigator.pushReplacementNamed(context, '/');
+  }
+}
 }

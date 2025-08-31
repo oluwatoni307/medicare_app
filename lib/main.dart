@@ -26,7 +26,7 @@ Future<void> main() async {
     print('✅ Hive initialized successfully');
     
     // Initialize notifications (uncomment when ready)
-    await NotificationService.instance.init();
+    // await NotificationService.instance.init();
     
     // Initialize Supabase
     await Supabase.initialize(
