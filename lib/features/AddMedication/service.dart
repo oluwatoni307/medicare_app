@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import '../notifications/notifications_viewmodel.dart';
-import '../notifications/service.dart';
+import '../notifications/service.dart'; // Your Android-optimized NotificationService
 import '/data/models/med.dart'; // Your updated Hive Med model
 import '/data/models/log.dart';
 import 'AddMedication_model.dart';
@@ -23,37 +22,38 @@ class MedicationService {
 
   /* ---------- CREATE ---------- */
 
-Future<String> addMedication(MedicationModel med, String userId) async {
-  await _ensureInitialized();
-  try {
-    final hiveMed = Med(
-      id: med.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-      name: med.medicationName ?? '',
-      dosage: med.dosage ?? '',
-      type: med.type ?? '',
-      scheduleTimes: med.scheduleTimes ?? [],
-      startAt: med.startDate!,
-      endAt: _calculateEndDate(med.startDate!, med.duration),
-    );
+  Future<String> addMedication(MedicationModel med, String userId) async {
+    await _ensureInitialized();
+    try {
+      final hiveMed = Med(
+        id: med.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+        name: med.medicationName ?? '',
+        dosage: med.dosage ?? '',
+        type: med.type ?? '',
+        scheduleTimes: med.scheduleTimes ?? [],
+        startAt: med.startDate!,
+        endAt: _calculateEndDate(med.startDate!, med.duration),
+      );
 
-    await _medsBox.add(hiveMed);
+      await _medsBox.add(hiveMed);
 
-    // === NEW: fire a single “success” notification 5 minutes after save ===
-    await NotificationService.instance.schedule(
-      medicineId: hiveMed.id,
-      scheduleId: '${hiveMed.id}_success',
-      name: hiveMed.name,
-      dosage: 'Saved – reminders will start soon',
-      at: DateTime.now().add(const Duration(minutes: 5)),
-    );
-  await _scheduleNotificationsForMed(hiveMed);
+      // 🔥 NEW: Schedule confirmation notification using your Android-optimized service
+      await NotificationService.instance.scheduleSimpleReminder(
+        medicineId: hiveMed.id,
+        scheduleId: '${hiveMed.id}_success',
+        medicineName: '${hiveMed.name} Added',
+        dosage: 'Medication saved - reminders will start soon',
+        doseTime: DateTime.now().add(const Duration(minutes: 2)),
+      );
 
+      // Schedule all treatment notifications
+      await _scheduleNotificationsForMed(hiveMed);
 
-    return hiveMed.id;
-  } catch (e) {
-    throw Exception('Add medication error: $e');
+      return hiveMed.id;
+    } catch (e) {
+      throw Exception('Add medication error: $e');
+    }
   }
-}
 
   /* ---------- READ ---------- */
   Future<List<MedicationModel>> getMedications(String userId) async {
@@ -86,9 +86,9 @@ Future<String> addMedication(MedicationModel med, String userId) async {
 
           await _medsBox.putAt(i, updatedMed);
 
-  // 🔥 ONLY ADDITION: Delete old + add new
-  await NotificationService.instance.cancelForMedicine(id);
-  await _scheduleNotificationsForMed(updatedMed);
+          // 🔥 FIXED: Using correct NotificationService methods
+          await NotificationService.instance.cancelForMedicine(id);
+          await _scheduleNotificationsForMed(updatedMed);
           break;
         }
       }
@@ -99,10 +99,11 @@ Future<String> addMedication(MedicationModel med, String userId) async {
 
   /* ---------- DELETE ---------- */
   Future<void> deleteMedication(String id) async {
-        await _ensureInitialized(); // Ensure boxes are initialized
+    await _ensureInitialized(); // Ensure boxes are initialized
 
     try {
-          await NotificationService.instance.cancelForMedicine(id);
+      // Cancel all notifications for this medicine first
+      await NotificationService.instance.cancelForMedicine(id);
 
       for (int i = 0; i < _medsBox.length; i++) {
         final med = _medsBox.getAt(i);
@@ -115,51 +116,106 @@ Future<String> addMedication(MedicationModel med, String userId) async {
       throw Exception('Delete medication error: $e');
     }
   }
-  
 
+  /* ---------- NOTIFICATION SCHEDULING ---------- */
 
-
-// 🔥 ONE SIMPLE HELPER:
-Future<void> _scheduleNotificationsForMed(Med med) async {
-  try {
-    // Convert TimeOfDay list directly (no parsing needed)
-    final dailyTimes = med.scheduleTimes.cast<TimeOfDay>();
-    
-    print('Daily times: $dailyTimes'); // Debug
-    
-    final days = med.endAt?.difference(med.startAt).inDays ?? 7;
-    print('Days: $days'); // Debug
-    
-    await NotificationService.instance.scheduleAllNotificationsForMedicine(
-      medicineId: med.id,
-      medicineName: med.name,
-      dosage: med.dosage,
-      dailyTimes: dailyTimes,
-      durationDays: days,
-    );
-  } catch (e) {
-    print('Notification scheduling failed: $e');
-    rethrow; // Don't hide the error
+  /// 🔥 UPDATED: Using your Android-optimized NotificationService methods
+  Future<void> _scheduleNotificationsForMed(Med med) async {
+    try {
+      // Convert TimeOfDay list directly (no parsing needed)
+      final dailyTimes = med.scheduleTimes.cast<TimeOfDay>();
+      
+      debugPrint('📱 Scheduling notifications for ${med.name}');
+      debugPrint('Daily times: $dailyTimes'); // Debug
+      
+      final days = med.endAt?.difference(med.startAt).inDays ?? 30; // Default 30 days if indefinite
+      debugPrint('Duration: $days days'); // Debug
+      
+      // Use your Android-optimized bulk scheduling method
+      await NotificationService.instance.scheduleAllTreatmentReminders(
+        medicineId: med.id,
+        medicineName: med.name,
+        dosage: med.dosage,
+        dailyTimes: dailyTimes,
+        durationDays: days,
+      );
+      
+      debugPrint('✅ Successfully scheduled notifications for ${med.name}');
+    } catch (e) {
+      debugPrint('❌ Notification scheduling failed for ${med.name}: $e');
+      rethrow; // Don't hide the error
+    }
   }
-}
 
+  /// Reschedule notifications with settings (for ViewModel compatibility)
+  Future<void> rescheduleNotificationsForMed(
+    Med med, 
+    NotificationSettings settings
+  ) async {
+    try {
+      final dailyTimes = med.scheduleTimes.cast<TimeOfDay>();
+      final days = med.endAt?.difference(med.startAt).inDays ?? 30;
+      
+      await NotificationService.instance.rescheduleAllForMedicine(
+        medicineId: med.id,
+        medicineName: med.name,
+        dosage: med.dosage,
+        dailyTimes: dailyTimes,
+        durationDays: days,
+        settings: settings,
+      );
+    } catch (e) {
+      debugPrint('❌ Notification rescheduling failed for ${med.name}: $e');
+      rethrow;
+    }
+  }
+
+  /* ---------- NOTIFICATION UTILITIES ---------- */
+
+  /// Get notification counts by medicine ID
+  Future<Map<String, int>> getNotificationCounts() async {
+    try {
+      return await NotificationService.instance.getScheduledCountByMedicine();
+    } catch (e) {
+      debugPrint('❌ Failed to get notification counts: $e');
+      return {};
+    }
+  }
+
+  /// Get total scheduled notifications count
+  Future<int> getTotalScheduledNotifications() async {
+    try {
+      return await NotificationService.instance.scheduledCount;
+    } catch (e) {
+      debugPrint('❌ Failed to get total scheduled count: $e');
+      return 0;
+    }
+  }
+
+  /// Check if notifications are properly configured
+  Future<bool> areNotificationsReady() async {
+    try {
+      return await NotificationService.instance.hasPermissions;
+    } catch (e) {
+      debugPrint('❌ Failed to check notification permissions: $e');
+      return false;
+    }
+  }
+
+  /// Send test notification
+  Future<bool> sendTestNotification() async {
+    try {
+      return await NotificationService.instance.sendTestNotification();
+    } catch (e) {
+      debugPrint('❌ Failed to send test notification: $e');
+      return false;
+    }
+  }
 
   /* ---------- LOG METHODS ---------- */
-  // Future<void> addLog(String medId, DateTime date, double percent) async {
-  //   try {
-  //     final log = LogModel(
-  //       medId: medId,
-  //       date: date,
-  //       percent: percent,
-  //     );
-  //     await _logsBox.add(log);
-  //   } catch (e) {
-  //     throw Exception('Add log error: $e');
-  //   }
-  // }
 
   Future<List<LogModel>> getLogsByMedId(String medId) async {
-        await _ensureInitialized(); // Ensure boxes are initialized
+    await _ensureInitialized(); // Ensure boxes are initialized
 
     try {
       return _logsBox.values
@@ -174,9 +230,8 @@ Future<void> _scheduleNotificationsForMed(Med med) async {
   
   // Calculate end date from duration string
   DateTime? _calculateEndDate(DateTime startDate, String? duration) {
-    
     if (duration == null || duration == 'indefinitely') {
-      return null;
+      return null; // Indefinite treatment
     }
 
     final parts = duration.split(' ');
@@ -209,7 +264,57 @@ Future<void> _scheduleNotificationsForMed(Med med) async {
       scheduleTimes: hiveMed.scheduleTimes, // Direct mapping
       duration: hiveMed.endAt == null 
           ? 'indefinitely' 
-          : '${hiveMed.startAt.difference(hiveMed.endAt!).inDays.abs()} days',
+          : '${hiveMed.endAt!.difference(hiveMed.startAt).inDays} days',
     );
+  }
+
+  /* ---------- BATCH OPERATIONS ---------- */
+
+  /// Reschedule all medications (useful after settings changes)
+  Future<void> rescheduleAllMedications(NotificationSettings settings) async {
+    await _ensureInitialized();
+    
+    try {
+      final hiveMeds = _medsBox.values.toList();
+      
+      // Cancel all existing notifications
+      await NotificationService.instance.cancelAllNotifications();
+      
+      // Reschedule each medication if notifications are enabled
+      if (settings.notificationsEnabled) {
+        for (final med in hiveMeds) {
+          await rescheduleNotificationsForMed(med, settings);
+        }
+      }
+      
+      debugPrint('✅ Rescheduled notifications for ${hiveMeds.length} medications');
+    } catch (e) {
+      debugPrint('❌ Failed to reschedule all medications: $e');
+      throw Exception('Reschedule all medications error: $e');
+    }
+  }
+
+  /// Get medication statistics
+  Future<Map<String, dynamic>> getMedicationStats() async {
+    await _ensureInitialized();
+    
+    try {
+      final hiveMeds = _medsBox.values.toList();
+      final notificationCounts = await getNotificationCounts();
+      final totalScheduled = await getTotalScheduledNotifications();
+      
+      return {
+        'totalMedications': hiveMeds.length,
+        'activeMedications': hiveMeds.where((med) => 
+          med.endAt == null || med.endAt!.isAfter(DateTime.now())
+        ).length,
+        'totalScheduledNotifications': totalScheduled,
+        'notificationsByMedicine': notificationCounts,
+        'hasNotificationPermissions': await areNotificationsReady(),
+      };
+    } catch (e) {
+      debugPrint('❌ Failed to get medication stats: $e');
+      return {};
+    }
   }
 }

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Reset Password (Hardcoded Test)</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <h2>Reset Your Password (Hardcoded Tokens)</h2>
+  <input type="password" id="new-password" placeholder="Enter new password" />
+  <button id="reset-btn">Update Password</button>
+  <p id="status"></p>
+
+  <script>
+    const { createClient } = supabase;
+    const supabaseUrl = "https://ucejrkydjqjymsepgsyz.supabase.co";
+    const anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVjZWpya3lkanFqeW1zZXBnc3l6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwOTA5NTksImV4cCI6MjA2NzY2Njk1OX0.G8qm1CH6_dbp6T0SunrBEIzQXOA9lCrCwGTjKwwGfkE"; // replace with your anon key
+    const client = createClient(supabaseUrl, anonKey);
+
+    // Hardcoded tokens from your example URL
+    const access_token = "eyJhbGciOiJIUzI1NiIsImtpZCI6IktSQ2pxVTV1aHpDMzhtOUwiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL3VjZWpya3lkanFqeW1zZXBnc3l6LnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiJiZWNiZWM3MC0yMjAwLTQ4N2ItOGQwNS01NTJmNWM2Mzg1MDEiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzU2NzMxMjU5LCJpYXQiOjE3NTY3Mjc2NTksImVtYWlsIjoiZW1tYW51ZWx0b25pMzA3QGdtYWlsLmNvbSIsInBob25lIjoiIiwiYXBwX21ldGFkYXRhIjp7InByb3ZpZGVyIjoiZW1haWwiLCJwcm92aWRlcnMiOlsiZW1haWwiXX0sInVzZXJfbWV0YWRhdGEiOnsiZW1haWxfdmVyaWZpZWQiOnRydWV9LCJyb2xlIjoiYXV0aGVudGljYXRlZCIsImFhbCI6ImFhbDEiLCJhbXIiOlt7Im1ldGhvZCI6Im90cCIsInRpbWVzdGFtcCI6MTc1NjcyNzY1OX1dLCJzZXNzaW9uX2lkIjoiNTI4NzhlZjUtZjAwMi00Y2ZjLWE5NDctNDE3YTNlMjBjOTBhIiwiaXNfYW5vbnltb3VzIjpmYWxzZX0.vpVg8gG_j7xboZXlHFjY8Svsq0jKaRTh1Mu3ETy56Yg";
+    const refresh_token = "276ie6rjy22p";
+
+    async function handleReset() {
+      // Set session
+      const { error: sessionError } = await client.auth.setSession({
+        access_token,
+        refresh_token,
+      });
+
+      if (sessionError) {
+        document.getElementById("status").innerText = "Session error: " + sessionError.message;
+        return;
+      }
+
+      // Update password
+      const newPassword = document.getElementById("new-password").value;
+      const { error } = await client.auth.updateUser({ password: newPassword });
+
+      if (error) {
+        document.getElementById("status").innerText = "Error: " + error.message;
+      } else {
+        document.getElementById("status").innerText = "Password updated successfully!";
+      }
+    }
+
+    document.getElementById("reset-btn").addEventListener("click", handleReset);
+  </script>
+</body>
+</html>
