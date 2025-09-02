@@ -1,4 +1,4 @@
-// notification_service.dart – Fixed version with proper channel validation
+// notification_service.dart – Complete fixed version with proper permissions
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -20,12 +20,30 @@ class NotificationService {
   bool _channelInitialized = false;
 
   Future<void> init() async {
-    await _logService.init();
-    await _initializeChannels();
-    
-    AwesomeNotifications().setListeners(
-      onActionReceivedMethod: _onAction,
-    );
+    try {
+      await _logService.init();
+      debugPrint('📱 Initializing notification service...');
+      
+      await _initializeChannels();
+      debugPrint('📱 Channels initialized');
+      
+      AwesomeNotifications().setListeners(
+        onActionReceivedMethod: _onAction,
+      );
+      debugPrint('📱 Listeners set');
+      
+      // AUTOMATICALLY REQUEST PERMISSIONS ON INIT
+      debugPrint('📱 Requesting permissions...');
+      final permissionsGranted = await requestPermissions();
+      debugPrint('📱 Permissions granted: $permissionsGranted');
+      
+      // Run diagnostics after initialization
+      await debugNotificationState();
+      
+    } catch (e) {
+      debugPrint('❌ Notification service initialization failed: $e');
+      rethrow;
+    }
   }
 
   /* ---------- ANDROID 14+ OPTIMIZED INITIALIZATION ---------- */
@@ -56,25 +74,37 @@ class NotificationService {
     _channelInitialized = true;
   }
 
-  /* ---------- CRITICAL ANDROID 14+ PERMISSIONS ---------- */
+  /* ---------- IMPROVED PERMISSION REQUEST ---------- */
 
   Future<bool> requestPermissions() async {
     try {
+      debugPrint('📱 Checking notification permissions...');
+      
       // Basic notification permission
       if (!await AwesomeNotifications().isNotificationAllowed()) {
+        debugPrint('📱 Requesting basic notification permission...');
         final granted = await AwesomeNotifications().requestPermissionToSendNotifications();
+        debugPrint('📱 Basic notification permission granted: $granted');
         if (!granted) return false;
+      } else {
+        debugPrint('✅ Basic notification permission already granted');
       }
 
       // CRITICAL: Exact alarm permission for Android 12+
+      debugPrint('📱 Checking exact alarm permission...');
       if (await Permission.scheduleExactAlarm.isDenied) {
+        debugPrint('📱 Requesting exact alarm permission...');
         final result = await Permission.scheduleExactAlarm.request();
+        debugPrint('📱 Exact alarm permission result: ${result.name}');
         if (!result.isGranted) {
           debugPrint('❌ CRITICAL: Exact alarm permission denied');
           return false;
         }
+      } else {
+        debugPrint('✅ Exact alarm permission already granted');
       }
 
+      debugPrint('✅ All required permissions granted');
       return true;
     } catch (e) {
       debugPrint('❌ Permission request failed: $e');
@@ -107,6 +137,12 @@ class NotificationService {
     required String dosage,
     required DateTime doseTime,
   }) async {
+    // CRITICAL: Check permissions first
+    if (!await hasPermissions) {
+      debugPrint('❌ Missing required permissions for scheduling');
+      return false;
+    }
+    
     // Ensure channel exists before scheduling
     await _ensureChannelExists();
     
@@ -114,6 +150,7 @@ class NotificationService {
     
     // Don't schedule past notifications
     if (doseTime.isBefore(DateTime.now().subtract(Duration(minutes: 1)))) {
+      debugPrint('⏰ Skipping past notification: $doseTime');
       return false;
     }
     
@@ -159,19 +196,23 @@ class NotificationService {
         ),
       );
 
-      // Verify it was actually scheduled (Android 14+ validation)
       if (success) {
+        debugPrint('✅ Notification scheduled: $scheduleId for $doseTime');
+        
+        // Verify it was actually scheduled (Android 14+ validation)
         await Future.delayed(Duration(milliseconds: 300));
         final verified = await _verifyScheduled(scheduleId);
         if (!verified) {
           debugPrint('❌ Notification not found in system after scheduling');
           return false;
         }
+      } else {
+        debugPrint('❌ Failed to schedule notification: $scheduleId');
       }
 
       return success;
     } catch (e) {
-      debugPrint('❌ Failed to schedule notification: $e');
+      debugPrint('❌ Exception scheduling notification: $e');
       return false;
     }
   }
@@ -442,15 +483,28 @@ class NotificationService {
     }
   }
 
-  /// FIXED: Proper channel validation method
+  /// FIXED: Better channel validation that actually checks if channel works
   Future<bool> _hasValidChannel() async {
-    // Simple check: if we initialized the channel and no errors occurred, it exists
-    if (_channelInitialized) return true;
-    
-    // Alternative: Try to ensure channel exists
     try {
-      await _ensureChannelExists();
-      return true;
+      // Try to create a test notification to verify channel works
+      final testId = DateTime.now().millisecondsSinceEpoch;
+      final testResult = await AwesomeNotifications().createNotification(
+        content: NotificationContent(
+          id: testId,
+          channelKey: _medChannel,
+          title: 'Channel Test',
+          body: 'Testing channel',
+          autoDismissible: true,
+          showWhen: false,
+        ),
+      );
+      
+      // Immediately cancel the test notification
+      if (testResult) {
+        await AwesomeNotifications().cancel(testId);
+      }
+      
+      return testResult;
     } catch (e) {
       debugPrint('❌ Channel validation failed: $e');
       return false;
@@ -488,6 +542,45 @@ class NotificationService {
     }
   }
 
+  /* ---------- DEBUGGING METHODS ---------- */
+
+  /// Comprehensive diagnostic method
+  Future<Map<String, dynamic>> getDiagnostics() async {
+    final permissions = await androidPermissionStatus;
+    final scheduled = await scheduledCount;
+    final channelValid = await _hasValidChannel();
+    
+    return {
+      'permissions': permissions,
+      'scheduledCount': scheduled,
+      'channelValid': channelValid,
+      'systemHealthy': await isSystemHealthy,
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+  }
+
+  /// Debug method to log current notification state
+  Future<void> debugNotificationState() async {
+    final diagnostics = await getDiagnostics();
+    debugPrint('🔍 NOTIFICATION DIAGNOSTICS:');
+    debugPrint('   Permissions: ${diagnostics['permissions']}');
+    debugPrint('   Scheduled Count: ${diagnostics['scheduledCount']}');
+    debugPrint('   Channel Valid: ${diagnostics['channelValid']}');
+    debugPrint('   System Healthy: ${diagnostics['systemHealthy']}');
+    
+    // List current scheduled notifications
+    try {
+      final scheduled = await AwesomeNotifications().listScheduledNotifications();
+      debugPrint('   Scheduled Notifications: ${scheduled.length}');
+      for (final notif in scheduled.take(5)) { // Show first 5
+        final payload = notif.content?.payload;
+        debugPrint('     - ${payload?['medicineName']} at ${notif.schedule?.toString()}');
+      }
+    } catch (e) {
+      debugPrint('   Error listing scheduled: $e');
+    }
+  }
+
   /// Show battery optimization guidance for problematic devices
   void showBatteryOptimizationGuidance() {
     debugPrint('''
@@ -502,6 +595,44 @@ Manufacturer-specific:
 - Xiaomi: Settings > Apps > [App] > Battery saver > No restrictions  
 - Huawei: Settings > Apps > [App] > Battery > App launch > Manage manually
 ''');
+  }
+
+  /* ---------- PUBLIC HELPER METHODS ---------- */
+  
+  /// Call this method when user first enables notifications or in app settings
+  Future<bool> setupNotificationsForUser() async {
+    debugPrint('📱 Setting up notifications for user...');
+    
+    // Request all permissions
+    final hasBasicPermissions = await requestPermissions();
+    if (!hasBasicPermissions) {
+      debugPrint('❌ Basic permissions denied');
+      return false;
+    }
+    
+    // Request battery optimization (optional but recommended)
+    final hasBatteryOptimization = await requestBatteryOptimization();
+    if (!hasBatteryOptimization) {
+      debugPrint('⚠️ Battery optimization not granted - notifications may be unreliable');
+      showBatteryOptimizationGuidance();
+    }
+    
+    // Test the notification system
+    final testResult = await sendTestNotification();
+    if (!testResult) {
+      debugPrint('❌ Test notification failed');
+      return false;
+    }
+    
+    debugPrint('✅ Notification setup completed successfully');
+    return true;
+  }
+
+  /// Check if system is ready for notifications
+  Future<bool> get isReadyForNotifications async {
+    final hasPerms = await hasPermissions;
+    final isHealthy = await isSystemHealthy;
+    return hasPerms && isHealthy;
   }
 }
 
