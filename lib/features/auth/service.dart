@@ -107,12 +107,10 @@ class AuthService {
   }
 
   // Alternative method: Send reset email (standard way)
+
 Future<void> sendPasswordResetEmail(String email) async {
   try {
-    await _client.auth.resetPasswordForEmail(
-      email,
-      redirectTo: 'https://demo-change-password-ov9h1qntn.vercel.app/', 
-    );
+    await _client.auth.resetPasswordForEmail(email);
   } catch (e) {
     throw Exception('Failed to send reset email: $e');
   }
