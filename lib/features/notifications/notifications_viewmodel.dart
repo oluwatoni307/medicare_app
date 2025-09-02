@@ -216,10 +216,8 @@ class NotificationViewModel extends ChangeNotifier {
 
   Future<void> sendTestNotification() async {
     try {
-      final success = await _service.sendTest();
-      if (!success) {
-        _setError('Failed to send test notification');
-      }
+      final _ = await _service.sendTest();
+
     } catch (e) {
       _setError(e.toString());
     }
