@@ -1,7 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Essential permissions only -->
+    <!-- Essential permissions -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-        <!-- Android 14+ reliability permissions -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    
+    <!-- Android 14+ reliability permissions -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
@@ -11,12 +14,9 @@
     
     <!-- Vibration permission -->
     <uses-permission android:name="android.permission.VIBRATE" />
-    
-    <!-- For scheduled notifications -->
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
-    
+
     <application
-        android:label="medstracker"
+        android:label="medicare_app"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         
@@ -24,6 +24,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
+            android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
@@ -54,4 +55,12 @@
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
+    
+    <!-- Required to query activities that can process text -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
 </manifest>
