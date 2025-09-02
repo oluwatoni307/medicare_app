@@ -261,7 +261,7 @@ class NotificationService {
         // Skip past times for today
         if (day == 0 && doseDateTime.isBefore(DateTime.now())) continue;
         
-        final scheduleId = '${medicineId}_${day}_$timeIndex';
+        final scheduleId = '${medicineId}_$timeIndex';
         
         final success = await scheduleSimpleReminder(
           medicineId: medicineId,
@@ -308,32 +308,37 @@ class NotificationService {
 
   /* ---------- ACTION HANDLING ---------- */
 
-  Future<void> _onAction(ReceivedAction action) async {
-    final payload = action.payload;
-    if (payload == null) return;
+Future<void> _onAction(ReceivedAction action) async {
+  final payload = action.payload;
+  if (payload == null) return;
 
-    final medicineId = payload['medicineId'];
-    final scheduleId = payload['scheduleId'];
-    final date = payload['date'];
-    final medicineName = payload['medicineName'] ?? 'Medicine';
+  final scheduleId = payload['scheduleId'] ?? '';
+  final medicineId = payload['medicineId'];
+  final date = payload['date'];
+  final medicineName = payload['medicineName'] ?? 'Medicine';
 
-    if (medicineId == null || scheduleId == null || date == null) return;
-
-    try {
-      if (action.buttonKeyPressed == 'LOG_DOSE') {
-        await _logService.saveLog(
-          scheduleId: scheduleId,
-          status: feature.LogStatus.taken,
-          date: date,
-        );
-        
-        await _showConfirmation('✅ $medicineName logged');
-        debugPrint('✅ Dose logged: $scheduleId');
-      }
-    } catch (e) {
-      debugPrint('Error logging dose: $e');
-    }
+  // Skip the dummy confirmation notifications
+  if (scheduleId.endsWith('_success')) {
+    debugPrint('ℹ️ Ignoring confirmation notification tap');
+    await _showConfirmation('$medicineName reminder acknowledged');
+    return;
   }
+
+  try {
+    if (action.buttonKeyPressed == 'LOG_DOSE') {
+      await _logService.saveLog(
+        scheduleId: scheduleId,
+        status: feature.LogStatus.taken,
+        date: date!,
+      );
+      await _showConfirmation('✅ $medicineName logged');
+    }
+  } catch (e) {
+    debugPrint('⚠️ Could not log dose (probably test/unknown ID): $e');
+    // Graceful fallback: just show a toast
+    await _showConfirmation('$medicineName reminder dismissed');
+  }
+}
 
   /* ---------- PERMISSION CHECKS ---------- */
 
