@@ -1,31 +1,18 @@
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="your.package.name">
-
-    <!-- ===== 1.  ESSENTIAL PERMISSIONS  ===== -->
-    <uses-permission android:name="android.permission.INTERNET"/>
-    <!-- Android-13+ notification gate -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- DO NOT put package="..." here -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <!-- Exact timing Android-12+ -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
-    <!-- Wake device for full-screen intent -->
-    <uses-permission android:name="android.permission.WAKE_LOCK"/>
-    <!-- Re-schedule after reboot -->
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-    <!-- Allow full-screen alarm activity -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
-    <!-- Battery-opt dialog -->
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
-    <!-- Vibration pattern -->
     <uses-permission android:name="android.permission.VIBRATE"/>
 
-    <!-- ===== 2.  APPLICATION  ===== -->
     <application
         android:label="medicare_app"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
-
-        <!-- 2-a  Main Flutter activity -->
+        
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -43,7 +30,6 @@
             </intent-filter>
         </activity>
 
-        <!-- 2-b  Full-screen dose activity (big TAKEN / MISSED buttons) -->
         <activity
             android:name=".DoseActivity"
             android:exported="false"
@@ -52,7 +38,6 @@
             android:excludeFromRecents="true"
             android:theme="@style/Theme.Transparent"/>
 
-        <!-- 2-c  Awesome-Notifications receivers -->
         <receiver
             android:name="me.carda.awesome_notifications.core.broadcasters.receivers.ScheduledNotificationReceiver"
             android:exported="true"/>
@@ -65,13 +50,11 @@
             </intent-filter>
         </receiver>
 
-        <!-- 2-d  Flutter embedding -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2"/>
     </application>
 
-    <!-- ===== 3.  TEXT-PROCESS QUERY (Flutter template)  ===== -->
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
