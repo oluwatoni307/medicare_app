@@ -1,18 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- DO NOT put package="..." here -->
+    <!-- =====  PERMISSIONS  ===== -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
-    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
 
+    <!-- =====  APPLICATION  ===== -->
     <application
         android:label="medicare_app"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
-        
+
+        <!--  Main Flutter activity  -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -30,14 +34,16 @@
             </intent-filter>
         </activity>
 
+        <!--  Full-screen dose activity (lock-screen transparent)  -->
         <activity
             android:name=".DoseActivity"
             android:exported="false"
             android:showOnLockScreen="true"
             android:showForAllUsers="true"
             android:excludeFromRecents="true"
-            android:theme="@style/Theme.Transparent"/>
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
 
+        <!--  Awesome-Notifications receivers  -->
         <receiver
             android:name="me.carda.awesome_notifications.core.broadcasters.receivers.ScheduledNotificationReceiver"
             android:exported="true"/>
@@ -55,6 +61,7 @@
             android:value="2"/>
     </application>
 
+    <!--  TEXT-PROCESS QUERY (Flutter template)  -->
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
