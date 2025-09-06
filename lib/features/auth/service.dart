@@ -107,10 +107,13 @@ class AuthService {
   }
 
   // Alternative method: Send reset email (standard way)
-
 Future<void> sendPasswordResetEmail(String email) async {
   try {
-    await _client.auth.resetPasswordForEmail(email);
+   await _client.auth.resetPasswordForEmail(
+  email,
+  redirectTo: "myapp://reset-password", // ✅ deep link for mobile app
+);
+
   } catch (e) {
     throw Exception('Failed to send reset email: $e');
   }

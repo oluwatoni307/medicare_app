@@ -1,234 +1,83 @@
-// notification_service.dart – Complete fixed version with proper permissions
+// notification_service.dart – Android-only, rolling-window, 2 h timeout
+import 'dart:convert';
+import 'dart:math' as math;
+import 'dart:typed_data';
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'dart:typed_data';
-import 'dart:math' as math;
-// Import your LogService for direct logging
-import '../log/service.dart'; // Adjust path based on your feature structure
+import 'package:shared_preferences/shared_preferences.dart';
+// your existing log feature
+import '../log/service.dart';
 import '../log/log_model.dart' as feature;
 
 class NotificationService {
   NotificationService._();
   static final instance = NotificationService._();
-
   static const _medChannel = 'medicine_critical';
-  
+
   final LogService _logService = LogService();
-  
-  // Track channel initialization state
   bool _channelInitialized = false;
+
+  /* ================================================================
+                           PUBLIC ENTRY
+     ================================================================ */
 
   Future<void> init() async {
     try {
       await _logService.init();
-      debugPrint('📱 Initializing notification service...');
-      
-      await _initializeChannels();
-      debugPrint('📱 Channels initialized');
-      
+      debugPrint('📱 Initialising notification service...');
+      await _initialiseChannels();
       AwesomeNotifications().setListeners(
         onActionReceivedMethod: _onAction,
       );
-      debugPrint('📱 Listeners set');
-      
-      // AUTOMATICALLY REQUEST PERMISSIONS ON INIT
       debugPrint('📱 Requesting permissions...');
       final permissionsGranted = await requestPermissions();
       debugPrint('📱 Permissions granted: $permissionsGranted');
-      
-      // Run diagnostics after initialization
       await debugNotificationState();
-      
     } catch (e) {
-      debugPrint('❌ Notification service initialization failed: $e');
+      debugPrint('❌ Notification service init failed: $e');
       rethrow;
     }
   }
 
-  /* ---------- ANDROID 14+ OPTIMIZED INITIALIZATION ---------- */
-
-  Future<void> _initializeChannels() async {
-    await AwesomeNotifications().initialize(
-      null,
-      [
-        NotificationChannel(
-          channelKey: _medChannel,
-          channelName: 'Medicine Reminders',
-          channelDescription: 'Critical medication dose reminders',
-          importance: NotificationImportance.Max,        // MAX for Android 14+ reliability
-          defaultColor: Colors.blue,
-          ledColor: Colors.white,
-          playSound: true,
-          enableVibration: true,
-          vibrationPattern: Int64List.fromList([0, 1000, 500, 1000]), 
-          channelShowBadge: true,
-          onlyAlertOnce: false,                          // Allow repeated alerts
-          locked: true,                                  // Prevent user from disabling
-          defaultRingtoneType: DefaultRingtoneType.Alarm, // Use ALARM for reliability
-          enableLights: true,
-          criticalAlerts: true,
-        ),
-      ],
-    );
-    _channelInitialized = true;
+  Future<bool> setupNotificationsForUser() async {
+    if (!await requestPermissions()) return false;
+    await requestBatteryOptimization();
+    return await sendTestNotification();
   }
 
-  /* ---------- IMPROVED PERMISSION REQUEST ---------- */
+  /* ================================================================
+                          PERMISSIONS
+     ================================================================ */
 
   Future<bool> requestPermissions() async {
-    try {
-      debugPrint('📱 Checking notification permissions...');
-      
-      // Basic notification permission
-      if (!await AwesomeNotifications().isNotificationAllowed()) {
-        debugPrint('📱 Requesting basic notification permission...');
-        final granted = await AwesomeNotifications().requestPermissionToSendNotifications();
-        debugPrint('📱 Basic notification permission granted: $granted');
-        if (!granted) return false;
-      } else {
-        debugPrint('✅ Basic notification permission already granted');
-      }
-
-      // CRITICAL: Exact alarm permission for Android 12+
-      debugPrint('📱 Checking exact alarm permission...');
-      if (await Permission.scheduleExactAlarm.isDenied) {
-        debugPrint('📱 Requesting exact alarm permission...');
-        final result = await Permission.scheduleExactAlarm.request();
-        debugPrint('📱 Exact alarm permission result: ${result.name}');
-        if (!result.isGranted) {
-          debugPrint('❌ CRITICAL: Exact alarm permission denied');
-          return false;
-        }
-      } else {
-        debugPrint('✅ Exact alarm permission already granted');
-      }
-
-      debugPrint('✅ All required permissions granted');
-      return true;
-    } catch (e) {
-      debugPrint('❌ Permission request failed: $e');
-      return false;
+    // 1. basic notification (Android-13+)
+    if (!await AwesomeNotifications().isNotificationAllowed()) {
+      final ok = await AwesomeNotifications().requestPermissionToSendNotifications();
+      if (!ok) return false;
     }
+    // 2. exact-alarm (Android-12+)
+    if (await Permission.scheduleExactAlarm.isDenied) {
+      final status = await Permission.scheduleExactAlarm.request();
+      if (!status.isGranted) return false;
+    }
+    return true;
   }
 
-  /// Request battery optimization exemption (call separately when user enables notifications)
   Future<bool> requestBatteryOptimization() async {
-    try {
-      final status = await Permission.ignoreBatteryOptimizations.status;
-      if (status.isDenied) {
-        final result = await Permission.ignoreBatteryOptimizations.request();
-        return result.isGranted;
-      }
-      return status.isGranted;
-    } catch (e) {
-      debugPrint('Battery optimization request failed: $e');
-      return false;
+    final status = await Permission.ignoreBatteryOptimizations.status;
+    if (status.isDenied) {
+      final result = await Permission.ignoreBatteryOptimizations.request();
+      return result.isGranted;
     }
+    return status.isGranted;
   }
 
-  /* ---------- RELIABLE SCHEDULING ---------- */
+  /* ================================================================
+                        ROLLING-WINDOW SCHEDULER
+     ================================================================ */
 
-  /// Schedule ONE reliable Android 14+ compatible notification
-  Future<bool> scheduleSimpleReminder({
-    required String medicineId,
-    required String scheduleId,
-    required String medicineName,
-    required String dosage,
-    required DateTime doseTime,
-  }) async {
-    // CRITICAL: Check permissions first
-    if (!await hasPermissions) {
-      debugPrint('❌ Missing required permissions for scheduling');
-      return false;
-    }
-    
-    // Ensure channel exists before scheduling
-    await _ensureChannelExists();
-    
-    final id = _generateStableId(scheduleId, doseTime);
-    
-    // Don't schedule past notifications
-    if (doseTime.isBefore(DateTime.now().subtract(Duration(minutes: 1)))) {
-      debugPrint('⏰ Skipping past notification: $doseTime');
-      return false;
-    }
-    
-    try {
-      final success = await AwesomeNotifications().createNotification(
-        content: NotificationContent(
-          id: id,
-          channelKey: _medChannel,
-          title: '💊 $medicineName',
-          body: 'Time for your $dosage dose',
-          summary: 'Medicine Reminder',
-          wakeUpScreen: true,
-          fullScreenIntent: true,                        // Android 14+ reliability
-          category: NotificationCategory.Alarm,          // High priority category
-          payload: {
-            'medicineId': medicineId,
-            'scheduleId': scheduleId,
-            'date': doseTime.toIso8601String().split('T').first,
-            'medicineName': medicineName,
-            'dosage': dosage,
-          },
-          autoDismissible: false,                        // Don't auto-dismiss medical alerts
-          showWhen: true,
-          displayOnBackground: true,
-          displayOnForeground: true,
-          notificationLayout: NotificationLayout.Default,
-          // No timeout for medical notifications
-        ),
-        actionButtons: [
-          NotificationActionButton(
-            key: 'LOG_DOSE',
-            label: '✅ LOG',
-            color: Colors.green,
-            autoDismissible: true,
-            requireInputText: false,
-            actionType: ActionType.Default,
-          ),
-        ],
-        schedule: NotificationCalendar.fromDate(
-          date: doseTime,
-          preciseAlarm: true,                            // Android 14+ exact timing
-          allowWhileIdle: true,                          // Work in Doze mode
-        ),
-      );
-
-      if (success) {
-        debugPrint('✅ Notification scheduled: $scheduleId for $doseTime');
-        
-        // Verify it was actually scheduled (Android 14+ validation)
-        await Future.delayed(Duration(milliseconds: 300));
-        final verified = await _verifyScheduled(scheduleId);
-        if (!verified) {
-          debugPrint('❌ Notification not found in system after scheduling');
-          return false;
-        }
-      } else {
-        debugPrint('❌ Failed to schedule notification: $scheduleId');
-      }
-
-      return success;
-    } catch (e) {
-      debugPrint('❌ Exception scheduling notification: $e');
-      return false;
-    }
-  }
-
-  /// Verify notification was actually scheduled (Android 14+ reliability check)
-  Future<bool> _verifyScheduled(String scheduleId) async {
-    try {
-      final scheduled = await AwesomeNotifications().listScheduledNotifications();
-      return scheduled.any((n) => n.content?.payload?['scheduleId'] == scheduleId);
-    } catch (e) {
-      return false;
-    }
-  }
-
-  /* ---------- BATCH SCHEDULING ---------- */
-
+  /// View-model calls this – we schedule ONLY the next single alarm
   Future<void> scheduleAllTreatmentReminders({
     required String medicineId,
     required String medicineName,
@@ -236,55 +85,249 @@ class NotificationService {
     required List<TimeOfDay> dailyTimes,
     required int durationDays,
   }) async {
-    final startDate = DateTime.now();
-    int scheduledCount = 0;
-    
-    // Android limit check
-    final currentCount = await this.scheduledCount;
-    final maxAllowed = 400; // Conservative limit
-    final requestedTotal = durationDays * dailyTimes.length;
-    final actualLimit = math.min(requestedTotal, maxAllowed - currentCount);
-    
-    int processed = 0;
-    
-    for (int day = 0; day < durationDays && processed < actualLimit; day++) {
-      for (int timeIndex = 0; timeIndex < dailyTimes.length && processed < actualLimit; timeIndex++) {
-        final time = dailyTimes[timeIndex];
-        final doseDateTime = DateTime(
-          startDate.year,
-          startDate.month,
-          startDate.day + day,
-          time.hour,
-          time.minute,
-        );
-        
-        // Skip past times for today
-        if (day == 0 && doseDateTime.isBefore(DateTime.now())) continue;
-        
-        final scheduleId = '${medicineId}_$timeIndex';
-        
-        final success = await scheduleSimpleReminder(
-          medicineId: medicineId,
-          scheduleId: scheduleId,
-          medicineName: medicineName,
-          dosage: dosage,
-          doseTime: doseDateTime,
-        );
-        
-        if (success) scheduledCount++;
-        processed++;
-        
-        // Small delay to avoid overwhelming Android
-        if (processed % 15 == 0) {
-          await Future.delayed(Duration(milliseconds: 100));
+    final now = DateTime.now();
+    DateTime? next;
+    for (int d = 0; d < durationDays && next == null; d++) {
+      for (final tod in dailyTimes) {
+        final candidate = DateTime(now.year, now.month, now.day + d, tod.hour, tod.minute);
+        if (candidate.isAfter(now)) {
+          next = candidate;
+          break;
         }
       }
     }
-    
-    debugPrint('📅 Scheduled $scheduledCount/$processed notifications for $medicineName');
+    if (next == null) return;
+
+    // 1. schedule the single alarm
+    final ok = await scheduleSimpleReminder(
+      medicineId: medicineId,
+      scheduleId: '${medicineId}_rolling',
+      medicineName: medicineName,
+      dosage: dosage,
+      doseTime: next,
+    );
+    if (!ok) return;
+
+    // 2. store the remaining plan
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('rolling_plan_$medicineId', jsonEncode({
+      'medicineName': medicineName,
+      'dosage': dosage,
+      'dailyTimes': dailyTimes.map((t) => '${t.hour}:${t.minute}').toList(),
+      'durationDays': durationDays,
+      'startDay': now.toIso8601String().split('T').first,
+    }));
   }
 
-  /// Reschedule all notifications for a medicine (ViewModel compatibility)
+  /// Schedule ONE notification with 2-hour timeout and full-screen intent
+  Future<bool> scheduleSimpleReminder({
+    required String medicineId,
+    required String scheduleId,
+    required String medicineName,
+    required String dosage,
+    required DateTime doseTime,
+  }) async {
+    if (!await hasPermissions) return false;
+    await _ensureChannelExists();
+
+    final id = _generateStableId(scheduleId, doseTime);
+    if (doseTime.isBefore(DateTime.now().subtract(const Duration(minutes: 1)))) return false;
+
+    try {
+      final created = await AwesomeNotifications().createNotification(
+        content: NotificationContent(
+          id: id,
+          channelKey: _medChannel,
+          title: '💊 $medicineName',
+          body: 'Time for your $dosage dose',
+          summary: 'Medicine Reminder',
+          wakeUpScreen: true,
+          fullScreenIntent: true,
+          category: NotificationCategory.Alarm,
+          payload: {
+            'medicineId': medicineId,
+            'scheduleId': scheduleId,
+            'date': doseTime.toIso8601String().split('T').first,
+            'medicineName': medicineName,
+            'dosage': dosage,
+          },
+          autoDismissible: true,
+          showWhen: true,
+          displayOnBackground: true,
+          displayOnForeground: true,
+          notificationLayout: NotificationLayout.Default,
+          timeoutAfter: const Duration(hours: 2), // 2-hour window
+        ),
+        schedule: NotificationCalendar.fromDate(
+          date: doseTime,
+          preciseAlarm: true,
+          allowWhileIdle: true,
+        ),
+      );
+      return created;
+    } catch (e) {
+      debugPrint('❌ scheduleSimpleReminder exception: $e');
+      return false;
+    }
+  }
+
+  /* ================================================================
+                        ACTION HANDLER  (3 cases)
+     ================================================================ */
+
+  Future<void> _onAction(ReceivedAction action) async {
+    final payload = action.payload;
+    if (payload == null) return;
+
+    final medicineId = payload['medicineId']!;
+    final date = payload['date']!;
+    final medicineName = payload['medicineName'] ?? 'Medicine';
+
+    // 1. explicit TAKEN button
+    if (action.buttonKeyPressed == 'TAKEN') {
+      await _logService.saveLog(
+        scheduleId: payload['scheduleId']!,
+        status: feature.LogStatus.taken,
+        date: date,
+      );
+      await _showToast('✅ $medicineName logged as taken');
+      await _rescheduleNext(medicineId);
+      return;
+    }
+
+    // 2. explicit MISSED button
+    if (action.buttonKeyPressed == 'MISSED') {
+      await _logService.saveLog(
+        scheduleId: payload['scheduleId']!,
+        status: feature.LogStatus.missed,
+        date: date,
+      );
+      await _showToast('⚠️ $medicineName marked missed');
+      await _rescheduleNext(medicineId);
+      return;
+    }
+
+    // 3. dismissed (swipe away or 2-hour timeout) → auto-missed
+    if (action.buttonKeyPressed == null) {
+      await _logService.saveLog(
+        scheduleId: payload['scheduleId']!,
+        status: feature.LogStatus.missed,
+        date: date,
+      );
+      await _showToast('⏰ $medicineName auto-marked missed (2 h)');
+      await _rescheduleNext(medicineId);
+    }
+  }
+
+  /* ================================================================
+                        RESCHEDULE NEXT DOSE
+     ================================================================ */
+
+  Future<void> _rescheduleNext(String medicineId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('rolling_plan_$medicineId');
+    if (raw == null) return;
+    final plan = jsonDecode(raw) as Map<String, dynamic>;
+
+    final times = (plan['dailyTimes'] as List)
+        .map((s) => TimeOfDay(hour: int.parse(s.split(':')[0]), minute: int.parse(s.split(':')[1])))
+        .toList();
+    final startDate = DateTime.parse(plan['startDay'] as String);
+    final remainingDays = (plan['durationDays'] as int) - DateTime.now().difference(startDate).inDays;
+
+    if (remainingDays <= 0) {
+      await prefs.remove('rolling_plan_$medicineId');
+      return;
+    }
+
+    await scheduleAllTreatmentReminders(
+      medicineId: medicineId,
+      medicineName: plan['medicineName'],
+      dosage: plan['dosage'],
+      dailyTimes: times,
+      durationDays: remainingDays,
+    );
+  }
+
+  /* ================================================================
+                        BOOT SUPPORT
+     ================================================================ */
+
+  static Future<void> rescheduleAllOnBoot() async {
+    final prefs = await SharedPreferences.getInstance();
+    for (final key in prefs.getKeys().where((k) => k.startsWith('rolling_plan_'))) {
+      final medicineId = key.replaceFirst('rolling_plan_', '');
+      await instance._rescheduleNext(medicineId);
+    }
+  }
+
+  /* ================================================================
+                        UTILITIES
+     ================================================================ */
+
+  Future<void> _showToast(String msg) async {
+    await AwesomeNotifications().createNotification(
+      content: NotificationContent(
+        id: DateTime.now().millisecondsSinceEpoch,
+        channelKey: _medChannel,
+        title: '💊 MedTracker',
+        body: msg,
+        autoDismissible: true,
+        showWhen: false,
+        timeoutAfter: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  Future<bool> sendTestNotification() async =>
+      scheduleSimpleReminder(
+        medicineId: 'test',
+        scheduleId: 'test_schedule',
+        medicineName: 'Test Medicine',
+        dosage: '1 tablet',
+        doseTime: DateTime.now().add(const Duration(seconds: 5)),
+      );
+
+  Future<int> get scheduledCount async {
+    final list = await AwesomeNotifications().listScheduledNotifications();
+    return list.length;
+  }
+
+  Future<void> cancelForMedicine(String medicineId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('rolling_plan_$medicineId');
+    final list = await AwesomeNotifications().listScheduledNotifications();
+    for (final n in list) {
+      if (n.content?.payload?['medicineId'] == medicineId) {
+        await AwesomeNotifications().cancel(n.content!.id!);
+      }
+    }
+  }
+
+  Future<void> cancelAllNotifications() async {
+    final prefs = await SharedPreferences.getInstance();
+    for (final k in prefs.getKeys().where((k) => k.startsWith('rolling_plan_'))) {
+      await prefs.remove(k);
+    }
+    await AwesomeNotifications().cancelAll();
+  }
+
+  /* ----------------------------------------------------------
+        MISSING METHODS RESTORED – exact signatures you had
+     ---------------------------------------------------------- */
+
+  Future<Map<String, int>> getScheduledCountByMedicine() async {
+    final list = await AwesomeNotifications().listScheduledNotifications();
+    final counts = <String, int>{};
+    for (final n in list) {
+      final id = n.content?.payload?['medicineId'];
+      if (id != null) counts[id] = (counts[id] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  Future<bool> sendTest() async => sendTestNotification();
+
   Future<void> rescheduleAllForMedicine({
     required String medicineId,
     required String medicineName,
@@ -294,7 +337,6 @@ class NotificationService {
     required NotificationSettings settings,
   }) async {
     await cancelForMedicine(medicineId);
-    
     if (settings.notificationsEnabled) {
       await scheduleAllTreatmentReminders(
         medicineId: medicineId,
@@ -306,222 +348,51 @@ class NotificationService {
     }
   }
 
-  /* ---------- ACTION HANDLING ---------- */
+  /* ================================================================
+                        PERMISSION / HEALTH
+     ================================================================ */
 
-Future<void> _onAction(ReceivedAction action) async {
-  final payload = action.payload;
-  if (payload == null) return;
-
-  final scheduleId = payload['scheduleId'] ?? '';
-  final medicineId = payload['medicineId'];
-  final date = payload['date'];
-  final medicineName = payload['medicineName'] ?? 'Medicine';
-
-  // Skip the dummy confirmation notifications
-  if (scheduleId.endsWith('_success')) {
-    debugPrint('ℹ️ Ignoring confirmation notification tap');
-    await _showConfirmation('$medicineName reminder acknowledged');
-    return;
-  }
-
-  try {
-    if (action.buttonKeyPressed == 'LOG_DOSE') {
-      await _logService.saveLog(
-        scheduleId: scheduleId,
-        status: feature.LogStatus.taken,
-        date: date!,
-      );
-      await _showConfirmation('✅ $medicineName logged');
-    }
-  } catch (e) {
-    debugPrint('⚠️ Could not log dose (probably test/unknown ID): $e');
-    // Graceful fallback: just show a toast
-    await _showConfirmation('$medicineName reminder dismissed');
-  }
-}
-
-  /* ---------- PERMISSION CHECKS ---------- */
-
-  /// Check if we have basic required permissions
   Future<bool> get hasPermissions async {
-    try {
-      final notifications = await AwesomeNotifications().isNotificationAllowed();
-      final exactAlarm = await Permission.scheduleExactAlarm.isGranted;
-      return notifications && exactAlarm;
-    } catch (e) {
-      return false;
-    }
+    final notif = await AwesomeNotifications().isNotificationAllowed();
+    final exact = await Permission.scheduleExactAlarm.isGranted;
+    return notif && exact;
   }
 
-  /// Check if we have optimal permissions (including battery optimization)
-  Future<bool> get hasOptimalAndroidPermissions async {
-    try {
-      final notifications = await AwesomeNotifications().isNotificationAllowed();
-      final exactAlarm = await Permission.scheduleExactAlarm.isGranted;
-      final batteryOptimization = await Permission.ignoreBatteryOptimizations.isGranted;
-      
-      debugPrint('📱 Permissions: Notifications=$notifications, ExactAlarm=$exactAlarm, Battery=$batteryOptimization');
-      return notifications && exactAlarm && batteryOptimization;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  /// Get permission status map
-  Future<Map<String, bool>> get androidPermissionStatus async {
-    try {
-      return {
+  Future<Map<String, bool>> get androidPermissionStatus async => {
         'notifications': await AwesomeNotifications().isNotificationAllowed(),
         'exactAlarm': await Permission.scheduleExactAlarm.isGranted,
         'batteryOptimization': await Permission.ignoreBatteryOptimizations.isGranted,
       };
-    } catch (e) {
-      return {
-        'notifications': false,
-        'exactAlarm': false,
-        'batteryOptimization': false,
-      };
-    }
+
+  Future<Map<String, dynamic>> getDiagnostics() async {
+    final perms = await androidPermissionStatus;
+    final count = await scheduledCount;
+    return {
+      'permissions': perms,
+      'scheduledCount': count,
+      'timestamp': DateTime.now().toIso8601String(),
+    };
   }
 
-  /* ---------- UTILITY METHODS ---------- */
-
-  Future<void> _showConfirmation(String message) async {
-    await AwesomeNotifications().createNotification(
-      content: NotificationContent(
-        id: DateTime.now().millisecondsSinceEpoch,
-        channelKey: _medChannel,
-        title: '💊 MedTracker',
-        body: message,
-        autoDismissible: true,
-        showWhen: false,
-        timeoutAfter: Duration(seconds: 3),
-      ),
-    );
+  Future<void> debugNotificationState() async {
+    final diagnostics = await getDiagnostics();
+    debugPrint('🔍 NOTIFICATION DIAGNOSTICS: $diagnostics');
   }
 
-  Future<bool> sendTest() async {
-    return scheduleSimpleReminder(
-      medicineId: 'test',
-      scheduleId: 'test_schedule',
-      medicineName: 'Test Medicine',
-      dosage: '1 tablet',
-      doseTime: DateTime.now().add(Duration(seconds: 5)),
-    );
-  }
+  /* ================================================================
+                        PRIVATE HELPERS
+     ================================================================ */
 
-  Future<bool> sendTestNotification() async {
-    return sendTest();
-  }
+  int _generateStableId(String scheduleId, DateTime dt) =>
+      '$scheduleId${dt.year}${dt.month.toString().padLeft(2, '0')}${dt.day.toString().padLeft(2, '0')}${dt.hour.toString().padLeft(2, '0')}${dt.minute.toString().padLeft(2, '0')}'
+          .hashCode
+          .abs();
 
-  Future<void> cancelForMedicine(String medicineId) async {
-    try {
-      final list = await AwesomeNotifications().listScheduledNotifications();
-      int canceledCount = 0;
-      
-      for (final notification in list) {
-        if (notification.content?.payload?['medicineId'] == medicineId) {
-          await AwesomeNotifications().cancel(notification.content!.id!);
-          canceledCount++;
-        }
-      }
-      
-      debugPrint('🗑️ Canceled $canceledCount notifications for: $medicineId');
-    } catch (e) {
-      debugPrint('❌ Error canceling notifications: $e');
-    }
-  }
-
-  Future<int> get scheduledCount async {
-    try {
-      final list = await AwesomeNotifications().listScheduledNotifications();
-      return list.length;
-    } catch (e) {
-      return 0;
-    }
-  }
-
-  Future<void> cancelAllNotifications() async {
-    try {
-      await AwesomeNotifications().cancelAll();
-      debugPrint('🗑️ All notifications canceled');
-    } catch (e) {
-      debugPrint('❌ Error canceling all notifications: $e');
-    }
-  }
-
-  Future<Map<String, int>> getScheduledCountByMedicine() async {
-    try {
-      final list = await AwesomeNotifications().listScheduledNotifications();
-      final counts = <String, int>{};
-      
-      for (final notification in list) {
-        final medicineId = notification.content?.payload?['medicineId'];
-        if (medicineId != null) {
-          counts[medicineId] = (counts[medicineId] ?? 0) + 1;
-        }
-      }
-      
-      return counts;
-    } catch (e) {
-      return {};
-    }
-  }
-
-  int _generateStableId(String scheduleId, DateTime dateTime) {
-    final idString = '$scheduleId${dateTime.year}${dateTime.month.toString().padLeft(2, '0')}${dateTime.day.toString().padLeft(2, '0')}${dateTime.hour.toString().padLeft(2, '0')}${dateTime.minute.toString().padLeft(2, '0')}';
-    return idString.hashCode.abs();
-  }
-
-  /* ---------- ANDROID 14+ RELIABILITY CHECKS ---------- */
-
-  /// Quick system health check
-  Future<bool> get isSystemHealthy async {
-    try {
-      final hasPerms = await hasPermissions;
-      final scheduledCountValue = await scheduledCount;
-      final hasChannel = await _hasValidChannel();
-      
-      return hasPerms && scheduledCountValue < 400 && hasChannel;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  /// FIXED: Better channel validation that actually checks if channel works
-  Future<bool> _hasValidChannel() async {
-    try {
-      // Try to create a test notification to verify channel works
-      final testId = DateTime.now().millisecondsSinceEpoch;
-      final testResult = await AwesomeNotifications().createNotification(
-        content: NotificationContent(
-          id: testId,
-          channelKey: _medChannel,
-          title: 'Channel Test',
-          body: 'Testing channel',
-          autoDismissible: true,
-          showWhen: false,
-        ),
-      );
-      
-      // Immediately cancel the test notification
-      if (testResult) {
-        await AwesomeNotifications().cancel(testId);
-      }
-      
-      return testResult;
-    } catch (e) {
-      debugPrint('❌ Channel validation failed: $e');
-      return false;
-    }
-  }
-
-  /// Ensure the notification channel exists (idempotent)
   Future<void> _ensureChannelExists() async {
     if (_channelInitialized) return;
-    
-    try {
-      await AwesomeNotifications().setChannel(
+    await AwesomeNotifications().initialize(
+      null,
+      [
         NotificationChannel(
           channelKey: _medChannel,
           channelName: 'Medicine Reminders',
@@ -539,109 +410,18 @@ Future<void> _onAction(ReceivedAction action) async {
           enableLights: true,
           criticalAlerts: true,
         ),
-      );
-      _channelInitialized = true;
-    } catch (e) {
-      debugPrint('❌ Failed to ensure channel exists: $e');
-      rethrow;
-    }
+      ],
+    );
+    _channelInitialized = true;
   }
 
-  /* ---------- DEBUGGING METHODS ---------- */
-
-  /// Comprehensive diagnostic method
-  Future<Map<String, dynamic>> getDiagnostics() async {
-    final permissions = await androidPermissionStatus;
-    final scheduled = await scheduledCount;
-    final channelValid = await _hasValidChannel();
-    
-    return {
-      'permissions': permissions,
-      'scheduledCount': scheduled,
-      'channelValid': channelValid,
-      'systemHealthy': await isSystemHealthy,
-      'timestamp': DateTime.now().toIso8601String(),
-    };
-  }
-
-  /// Debug method to log current notification state
-  Future<void> debugNotificationState() async {
-    final diagnostics = await getDiagnostics();
-    debugPrint('🔍 NOTIFICATION DIAGNOSTICS:');
-    debugPrint('   Permissions: ${diagnostics['permissions']}');
-    debugPrint('   Scheduled Count: ${diagnostics['scheduledCount']}');
-    debugPrint('   Channel Valid: ${diagnostics['channelValid']}');
-    debugPrint('   System Healthy: ${diagnostics['systemHealthy']}');
-    
-    // List current scheduled notifications
-    try {
-      final scheduled = await AwesomeNotifications().listScheduledNotifications();
-      debugPrint('   Scheduled Notifications: ${scheduled.length}');
-      for (final notif in scheduled.take(5)) { // Show first 5
-        final payload = notif.content?.payload;
-        debugPrint('     - ${payload?['medicineName']} at ${notif.schedule?.toString()}');
-      }
-    } catch (e) {
-      debugPrint('   Error listing scheduled: $e');
-    }
-  }
-
-  /// Show battery optimization guidance for problematic devices
-  void showBatteryOptimizationGuidance() {
-    debugPrint('''
-🔋 BATTERY OPTIMIZATION GUIDANCE:
-For reliable notifications:
-1. Settings > Apps > [Your App] > Battery
-2. Select "Don't optimize" or "No restrictions"
-3. Enable "Auto-start" if available
-
-Manufacturer-specific:
-- Samsung: Settings > Apps > [App] > Battery > Optimize battery usage > Turn OFF
-- Xiaomi: Settings > Apps > [App] > Battery saver > No restrictions  
-- Huawei: Settings > Apps > [App] > Battery > App launch > Manage manually
-''');
-  }
-
-  /* ---------- PUBLIC HELPER METHODS ---------- */
-  
-  /// Call this method when user first enables notifications or in app settings
-  Future<bool> setupNotificationsForUser() async {
-    debugPrint('📱 Setting up notifications for user...');
-    
-    // Request all permissions
-    final hasBasicPermissions = await requestPermissions();
-    if (!hasBasicPermissions) {
-      debugPrint('❌ Basic permissions denied');
-      return false;
-    }
-    
-    // Request battery optimization (optional but recommended)
-    final hasBatteryOptimization = await requestBatteryOptimization();
-    if (!hasBatteryOptimization) {
-      debugPrint('⚠️ Battery optimization not granted - notifications may be unreliable');
-      showBatteryOptimizationGuidance();
-    }
-    
-    // Test the notification system
-    final testResult = await sendTestNotification();
-    if (!testResult) {
-      debugPrint('❌ Test notification failed');
-      return false;
-    }
-    
-    debugPrint('✅ Notification setup completed successfully');
-    return true;
-  }
-
-  /// Check if system is ready for notifications
-  Future<bool> get isReadyForNotifications async {
-    final hasPerms = await hasPermissions;
-    final isHealthy = await isSystemHealthy;
-    return hasPerms && isHealthy;
-  }
+  Future<void> _initialiseChannels() => _ensureChannelExists();
 }
 
-/// Simplified notification settings (backward compatibility)
+/* ================================================================
+                      BACKWARD-COMPAT SETTINGS MODEL
+     ================================================================ */
+
 class NotificationSettings {
   final bool notificationsEnabled;
   final bool soundEnabled;
