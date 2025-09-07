@@ -28,7 +28,7 @@
             <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme"/>
-            <intent-filter>
+            <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
@@ -46,13 +46,18 @@
         <!--  Awesome-Notifications receivers  -->
         <receiver
             android:name="me.carda.awesome_notifications.core.broadcasters.receivers.ScheduledNotificationReceiver"
-            android:exported="true"/>
+            android:exported="true"
+            android:enabled="true"/>
+        
         <receiver
             android:name="me.carda.awesome_notifications.core.broadcasters.receivers.RefreshSchedulesReceiver"
             android:exported="true"
+            android:enabled="true"
             android:permission="android.permission.RECEIVE_BOOT_COMPLETED">
-            <intent-filter>
+            <intent-filter android:priority="1000">
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+                <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
         </receiver>
 
