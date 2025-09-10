@@ -1,6 +1,6 @@
 // notification_service.dart – Android-only, rolling-window, 2 h timeout
 import 'dart:convert';
-import 'dart:math' as math;
+// import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +9,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 // your existing log feature
 import '../log/service.dart';
 import '../log/log_model.dart' as feature;
+
+/// CHANGED: top-level background handler required for delivered actions
+/// (ensures callbacks fire when app is backgrounded/terminated)
+@pragma('vm:entry-point')
+Future<void> onActionReceivedBackground(ReceivedAction action) async {
+  // forward to singleton; _onAction stays instance-level for testability, but background entry-point must be top-level
+  await NotificationService.instance._onAction(action);
+}
 
 class NotificationService {
   NotificationService._();
@@ -26,10 +34,14 @@ class NotificationService {
     try {
       await _logService.init();
       debugPrint('📱 Initialising notification service...');
+      // Make sure channel exists before registering listeners/scheduling
       await _initialiseChannels();
+
+      /// CHANGED: register top-level background handler so actions work when app is killed
       AwesomeNotifications().setListeners(
-        onActionReceivedMethod: _onAction,
+        onActionReceivedMethod: onActionReceivedBackground,
       );
+
       debugPrint('📱 Requesting permissions...');
       final permissionsGranted = await requestPermissions();
       debugPrint('📱 Permissions granted: $permissionsGranted');
@@ -89,7 +101,9 @@ class NotificationService {
     DateTime? next;
     for (int d = 0; d < durationDays && next == null; d++) {
       for (final tod in dailyTimes) {
-        final candidate = DateTime(now.year, now.month, now.day + d, tod.hour, tod.minute);
+        // safer day construction
+        final baseDay = DateTime(now.year, now.month, now.day).add(Duration(days: d));
+        final candidate = DateTime(baseDay.year, baseDay.month, baseDay.day, tod.hour, tod.minute);
         if (candidate.isAfter(now)) {
           next = candidate;
           break;
@@ -134,6 +148,7 @@ class NotificationService {
     if (doseTime.isBefore(DateTime.now().subtract(const Duration(minutes: 1)))) return false;
 
     try {
+      // CHANGED: add explicit action buttons so TAKEN/MISSED are available even when app is backgrounded
       final created = await AwesomeNotifications().createNotification(
         content: NotificationContent(
           id: id,
@@ -158,12 +173,62 @@ class NotificationService {
           notificationLayout: NotificationLayout.Default,
           timeoutAfter: const Duration(hours: 2), // 2-hour window
         ),
+        actionButtons: [
+          NotificationActionButton(key: 'TAKEN', label: 'Taken', actionType: ActionType.Default),
+          NotificationActionButton(key: 'MISSED', label: 'Missed', actionType: ActionType.Default),
+        ],
         schedule: NotificationCalendar.fromDate(
           date: doseTime,
           preciseAlarm: true,
           allowWhileIdle: true,
         ),
       );
+
+      // CHANGED: schedule a fallback follow-up notification at doseTime + 2 hours
+      // This is a resilience measure — if the dismiss callback is not delivered when the app is killed,
+      // the follow-up notification will appear and serve as a visible reminder / fallback.
+      // We won't fail the main scheduling if this follow-up fails.
+      try {
+        final followTime = doseTime.add(const Duration(hours: 2));
+        final followId = _generateStableId('${scheduleId}_auto_miss', followTime);
+        await AwesomeNotifications().createNotification(
+          content: NotificationContent(
+            id: followId,
+            channelKey: _medChannel,
+            title: '⏰ Missed: $medicineName',
+            body: 'Missed dose from ${doseTime.hour.toString().padLeft(2,'0')}:${doseTime.minute.toString().padLeft(2,'0')}',
+            summary: 'Missed dose fallback',
+            wakeUpScreen: false,
+            fullScreenIntent: false,
+            category: NotificationCategory.Reminder,
+            payload: {
+              'medicineId': medicineId,
+              'scheduleId': scheduleId,
+              'date': doseTime.toIso8601String().split('T').first,
+              'medicineName': medicineName,
+              'dosage': dosage,
+              'autoMiss': 'true',
+            },
+            autoDismissible: true,
+            showWhen: true,
+            displayOnBackground: true,
+            displayOnForeground: true,
+            notificationLayout: NotificationLayout.Default,
+          ),
+           actionButtons: [
+          NotificationActionButton(key: 'TAKEN', label: 'Taken', actionType: ActionType.Default),
+          NotificationActionButton(key: 'MISSED', label: 'Missed', actionType: ActionType.Default),
+        ],
+          schedule: NotificationCalendar.fromDate(
+            date: followTime,
+            preciseAlarm: true,
+            allowWhileIdle: true,
+          ),
+        );
+      } catch (e) {
+        debugPrint('⚠️ follow-up auto-miss scheduling failed: $e');
+      }
+
       return created;
     } catch (e) {
       debugPrint('❌ scheduleSimpleReminder exception: $e');
@@ -175,6 +240,9 @@ class NotificationService {
                         ACTION HANDLER  (3 cases)
      ================================================================ */
 
+  /// NOTE: this method remains an instance method to preserve testability and
+  /// to avoid changing external usage. It *is* invoked from the top-level
+  /// `onActionReceivedBackground` entry-point when the OS delivers events.
   Future<void> _onAction(ReceivedAction action) async {
     final payload = action.payload;
     if (payload == null) return;
@@ -206,17 +274,6 @@ class NotificationService {
       await _rescheduleNext(medicineId);
       return;
     }
-
-    // 3. dismissed (swipe away or 2-hour timeout) → auto-missed
-    if (action.buttonKeyPressed == null) {
-      await _logService.saveLog(
-        scheduleId: payload['scheduleId']!,
-        status: feature.LogStatus.missed,
-        date: date,
-      );
-      await _showToast('⏰ $medicineName auto-marked missed (2 h)');
-      await _rescheduleNext(medicineId);
-    }
   }
 
   /* ================================================================
@@ -233,7 +290,8 @@ class NotificationService {
         .map((s) => TimeOfDay(hour: int.parse(s.split(':')[0]), minute: int.parse(s.split(':')[1])))
         .toList();
     final startDate = DateTime.parse(plan['startDay'] as String);
-    final remainingDays = (plan['durationDays'] as int) - DateTime.now().difference(startDate).inDays;
+    final elapsedDays = DateTime.now().difference(startDate).inDays;
+    final remainingDays = (plan['durationDays'] as int) - elapsedDays;
 
     if (remainingDays <= 0) {
       await prefs.remove('rolling_plan_$medicineId');
@@ -255,6 +313,14 @@ class NotificationService {
 
   static Future<void> rescheduleAllOnBoot() async {
     final prefs = await SharedPreferences.getInstance();
+
+    // CHANGED: ensure channels are created before rescheduling on boot
+    try {
+      await instance._ensureChannelExists();
+    } catch (e) {
+      debugPrint('⚠️ Failed to ensure channels on boot: $e');
+    }
+
     for (final key in prefs.getKeys().where((k) => k.startsWith('rolling_plan_'))) {
       final medicineId = key.replaceFirst('rolling_plan_', '');
       await instance._rescheduleNext(medicineId);

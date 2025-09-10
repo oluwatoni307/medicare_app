@@ -6,7 +6,6 @@ import 'package:medicare_app/features/auth/auth_viewmodel.dart';
 import 'package:medicare_app/features/notifications/service.dart';
 import 'package:provider/provider.dart';
 import './theme.dart';
-import 'features/notifications/daily_notification_worker.dart';
 import 'routes.dart' show AppRoutes;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
