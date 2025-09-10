@@ -1,21 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- =====  PERMISSIONS  ===== -->
+    <!-- Basic app permissions -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    
+    <!-- Notification permissions (required for Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    
+    <!-- Exact alarm permissions (different requirements for different Android versions) -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    
+    <!-- Wake and screen permissions -->
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
+    
+    <!-- Boot and battery optimization -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+    
+    <!-- Notification features -->
     <uses-permission android:name="android.permission.VIBRATE"/>
+    
+    <!-- Foreground service (optional, only if you use AndroidForegroundService) -->
+    <!-- <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/> -->
 
     <!-- =====  APPLICATION  ===== -->
     <application
-        android:label="medicare_app"
+        android:label="Medstracker"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
-
+        
         <!--  Main Flutter activity  -->
         <activity
             android:name=".MainActivity"
@@ -24,7 +39,9 @@
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
-            android:windowSoftInputMode="adjustResize">
+            android:windowSoftInputMode="adjustResize"
+            android:showOnLockScreen="true"
+            android:turnScreenOn="true">
             <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme"/>
@@ -33,22 +50,26 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-
+        
         <!--  Full-screen dose activity (lock-screen transparent)  -->
         <activity
             android:name=".DoseActivity"
             android:exported="false"
             android:showOnLockScreen="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
             android:showForAllUsers="true"
             android:excludeFromRecents="true"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
-
-        <!--  Awesome-Notifications receivers  -->
+        
+        <!--  === AWESOME NOTIFICATIONS RECEIVERS ===  -->
+        <!--  Scheduled notification receiver  -->
         <receiver
             android:name="me.carda.awesome_notifications.core.broadcasters.receivers.ScheduledNotificationReceiver"
             android:exported="true"
             android:enabled="true"/>
-        
+       
+        <!--  Boot receiver to restore schedules after reboot  -->
         <receiver
             android:name="me.carda.awesome_notifications.core.broadcasters.receivers.RefreshSchedulesReceiver"
             android:exported="true"
@@ -61,11 +82,28 @@
             </intent-filter>
         </receiver>
 
+        <!--  Action button receiver for notification interactions  -->
+        <receiver 
+            android:name="me.carda.awesome_notifications.core.broadcasters.receivers.ActionButtonReceiver"
+            android:exported="true"
+            android:enabled="true"/>
+
+        <!--  Foreground service (optional - only add if using AndroidForegroundService)  -->
+        <!-- 
+        <service 
+            android:name="me.carda.awesome_notifications.core.services.ForegroundService"
+            android:enabled="true"
+            android:exported="false"
+            android:stopWithTask="true"
+            android:foregroundServiceType="specialUse">
+        </service>
+        -->
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2"/>
     </application>
-
+    
     <!--  TEXT-PROCESS QUERY (Flutter template)  -->
     <queries>
         <intent>
