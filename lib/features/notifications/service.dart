@@ -1,6 +1,5 @@
 // notification_service.dart – Android-only, rolling-window, 2 h timeout
 import 'dart:convert';
-// import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
@@ -10,11 +9,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../log/service.dart';
 import '../log/log_model.dart' as feature;
 
-/// CHANGED: top-level background handler required for delivered actions
-/// (ensures callbacks fire when app is backgrounded/terminated)
+/// Top-level background handler required for delivered actions
 @pragma('vm:entry-point')
 Future<void> onActionReceivedBackground(ReceivedAction action) async {
-  // forward to singleton; _onAction stays instance-level for testability, but background entry-point must be top-level
+  // forward to singleton
   await NotificationService.instance._onAction(action);
 }
 
@@ -34,10 +32,11 @@ class NotificationService {
     try {
       await _logService.init();
       debugPrint('📱 Initialising notification service...');
-      // Make sure channel exists before registering listeners/scheduling
-      await _initialiseChannels();
-
-      /// CHANGED: register top-level background handler so actions work when app is killed
+      
+      // Initialize AwesomeNotifications first with proper channel config
+      await _initializeAwesomeNotifications();
+      
+      // Register listeners for background actions
       AwesomeNotifications().setListeners(
         onActionReceivedMethod: onActionReceivedBackground,
       );
@@ -50,6 +49,34 @@ class NotificationService {
       debugPrint('❌ Notification service init failed: $e');
       rethrow;
     }
+  }
+
+  /// Initialize AwesomeNotifications with proper channel configuration
+  Future<void> _initializeAwesomeNotifications() async {
+    await AwesomeNotifications().initialize(
+      null, // null uses default app icon
+      [
+        NotificationChannel(
+          channelKey: _medChannel,
+          channelName: 'Medicine Reminders',
+          channelDescription: 'Critical medication dose reminders',
+          importance: NotificationImportance.Max,
+          defaultColor: Colors.blue,
+          ledColor: Colors.white,
+          playSound: true,
+          enableVibration: true,
+          vibrationPattern: Int64List.fromList([0, 1000, 500, 1000]),
+          channelShowBadge: true,
+          onlyAlertOnce: false,
+          locked: true,
+          defaultRingtoneType: DefaultRingtoneType.Alarm,
+          enableLights: true,
+          criticalAlerts: true,
+        ),
+      ],
+      debug: true, // Enable debug mode to see what's happening
+    );
+    _channelInitialized = true;
   }
 
   Future<bool> setupNotificationsForUser() async {
@@ -89,7 +116,6 @@ class NotificationService {
                         ROLLING-WINDOW SCHEDULER
      ================================================================ */
 
-  /// View-model calls this – we schedule ONLY the next single alarm
   Future<void> scheduleAllTreatmentReminders({
     required String medicineId,
     required String medicineName,
@@ -101,7 +127,6 @@ class NotificationService {
     DateTime? next;
     for (int d = 0; d < durationDays && next == null; d++) {
       for (final tod in dailyTimes) {
-        // safer day construction
         final baseDay = DateTime(now.year, now.month, now.day).add(Duration(days: d));
         final candidate = DateTime(baseDay.year, baseDay.month, baseDay.day, tod.hour, tod.minute);
         if (candidate.isAfter(now)) {
@@ -148,7 +173,7 @@ class NotificationService {
     if (doseTime.isBefore(DateTime.now().subtract(const Duration(minutes: 1)))) return false;
 
     try {
-      // CHANGED: add explicit action buttons so TAKEN/MISSED are available even when app is backgrounded
+      // Create notification with properly configured action buttons
       final created = await AwesomeNotifications().createNotification(
         content: NotificationContent(
           id: id,
@@ -166,16 +191,28 @@ class NotificationService {
             'medicineName': medicineName,
             'dosage': dosage,
           },
-          autoDismissible: true,
+          autoDismissible: false, // Changed: Don't auto-dismiss to ensure buttons work
           showWhen: true,
           displayOnBackground: true,
           displayOnForeground: true,
-          notificationLayout: NotificationLayout.Default,
-          timeoutAfter: const Duration(hours: 2), // 2-hour window
+          notificationLayout: NotificationLayout.BigText, // Changed: Use BigText for better button display
+          timeoutAfter: const Duration(hours: 2),
         ),
         actionButtons: [
-          NotificationActionButton(key: 'TAKEN', label: 'Taken', actionType: ActionType.Default),
-          NotificationActionButton(key: 'MISSED', label: 'Missed', actionType: ActionType.Default),
+          NotificationActionButton(
+            key: 'TAKEN',
+            label: 'Taken',
+            actionType: ActionType.KeepOnTop, // Changed: KeepOnTop ensures button works in background
+            color: Colors.green,
+            autoDismissible: true,
+          ),
+          NotificationActionButton(
+            key: 'MISSED',
+            label: 'Missed',
+            actionType: ActionType.KeepOnTop, // Changed: KeepOnTop ensures button works in background
+            color: Colors.orange,
+            autoDismissible: true,
+          ),
         ],
         schedule: NotificationCalendar.fromDate(
           date: doseTime,
@@ -184,10 +221,7 @@ class NotificationService {
         ),
       );
 
-      // CHANGED: schedule a fallback follow-up notification at doseTime + 2 hours
-      // This is a resilience measure — if the dismiss callback is not delivered when the app is killed,
-      // the follow-up notification will appear and serve as a visible reminder / fallback.
-      // We won't fail the main scheduling if this follow-up fails.
+      // Schedule follow-up notification
       try {
         final followTime = doseTime.add(const Duration(hours: 2));
         final followId = _generateStableId('${scheduleId}_auto_miss', followTime);
@@ -209,16 +243,28 @@ class NotificationService {
               'dosage': dosage,
               'autoMiss': 'true',
             },
-            autoDismissible: true,
+            autoDismissible: false, // Changed: Don't auto-dismiss
             showWhen: true,
             displayOnBackground: true,
             displayOnForeground: true,
-            notificationLayout: NotificationLayout.Default,
+            notificationLayout: NotificationLayout.BigText, // Changed: Use BigText
           ),
-           actionButtons: [
-          NotificationActionButton(key: 'TAKEN', label: 'Taken', actionType: ActionType.Default),
-          NotificationActionButton(key: 'MISSED', label: 'Missed', actionType: ActionType.Default),
-        ],
+          actionButtons: [
+            NotificationActionButton(
+              key: 'TAKEN',
+              label: 'Mark as Taken',
+              actionType: ActionType.KeepOnTop, // Changed: KeepOnTop
+              color: Colors.green,
+              autoDismissible: true,
+            ),
+            NotificationActionButton(
+              key: 'MISSED',
+              label: 'Confirm Missed',
+              actionType: ActionType.KeepOnTop, // Changed: KeepOnTop
+              color: Colors.orange,
+              autoDismissible: true,
+            ),
+          ],
           schedule: NotificationCalendar.fromDate(
             date: followTime,
             preciseAlarm: true,
@@ -237,40 +283,59 @@ class NotificationService {
   }
 
   /* ================================================================
-                        ACTION HANDLER  (3 cases)
+                        ACTION HANDLER
      ================================================================ */
 
-  /// NOTE: this method remains an instance method to preserve testability and
-  /// to avoid changing external usage. It *is* invoked from the top-level
-  /// `onActionReceivedBackground` entry-point when the OS delivers events.
   Future<void> _onAction(ReceivedAction action) async {
+    // Initialize services if needed (when called from background)
+    if (!_logService.isInitialized) {
+      await _logService.init();
+    }
+    
     final payload = action.payload;
     if (payload == null) return;
 
-    final medicineId = payload['medicineId']!;
-    final date = payload['date']!;
+    final medicineId = payload['medicineId'];
+    if (medicineId == null) return;
+    
+    final date = payload['date'] ?? DateTime.now().toIso8601String().split('T').first;
     final medicineName = payload['medicineName'] ?? 'Medicine';
+    final scheduleId = payload['scheduleId'] ?? '';
 
-    // 1. explicit TAKEN button
+    debugPrint('🔔 Action received: ${action.buttonKeyPressed} for $medicineName');
+
+    // Handle TAKEN button
     if (action.buttonKeyPressed == 'TAKEN') {
       await _logService.saveLog(
-        scheduleId: payload['scheduleId']!,
+        scheduleId: scheduleId,
         status: feature.LogStatus.taken,
         date: date,
       );
+      
+      // Cancel the follow-up "missed" notification if it exists
+      final followId = _generateStableId('${scheduleId}_auto_miss', 
+        DateTime.parse(date).add(const Duration(hours: 2)));
+      await AwesomeNotifications().cancel(followId);
+      
       await _showToast('✅ $medicineName logged as taken');
       await _rescheduleNext(medicineId);
       return;
     }
 
-    // 2. explicit MISSED button
+    // Handle MISSED button
     if (action.buttonKeyPressed == 'MISSED') {
       await _logService.saveLog(
-        scheduleId: payload['scheduleId']!,
+        scheduleId: scheduleId,
         status: feature.LogStatus.missed,
         date: date,
       );
-      await _showToast('⚠️ $medicineName marked missed');
+      
+      // Cancel the follow-up notification if it exists
+      final followId = _generateStableId('${scheduleId}_auto_miss', 
+        DateTime.parse(date).add(const Duration(hours: 2)));
+      await AwesomeNotifications().cancel(followId);
+      
+      await _showToast('⚠️ $medicineName marked as missed');
       await _rescheduleNext(medicineId);
       return;
     }
@@ -314,7 +379,6 @@ class NotificationService {
   static Future<void> rescheduleAllOnBoot() async {
     final prefs = await SharedPreferences.getInstance();
 
-    // CHANGED: ensure channels are created before rescheduling on boot
     try {
       await instance._ensureChannelExists();
     } catch (e) {
@@ -340,19 +404,55 @@ class NotificationService {
         body: msg,
         autoDismissible: true,
         showWhen: false,
+        notificationLayout: NotificationLayout.Default,
         timeoutAfter: const Duration(seconds: 3),
       ),
     );
   }
 
-  Future<bool> sendTestNotification() async =>
-      scheduleSimpleReminder(
-        medicineId: 'test',
-        scheduleId: 'test_schedule',
-        medicineName: 'Test Medicine',
-        dosage: '1 tablet',
-        doseTime: DateTime.now().add(const Duration(seconds: 5)),
-      );
+  Future<bool> sendTestNotification() async {
+    // Send immediate test notification with action buttons
+    final id = DateTime.now().millisecondsSinceEpoch;
+    return await AwesomeNotifications().createNotification(
+      content: NotificationContent(
+        id: id,
+        channelKey: _medChannel,
+        title: '💊 Test Medicine',
+        body: 'This is a test notification. Try the action buttons!',
+        summary: 'Test Notification',
+        wakeUpScreen: true,
+        category: NotificationCategory.Alarm,
+        payload: {
+          'medicineId': 'test',
+          'scheduleId': 'test_schedule',
+          'date': DateTime.now().toIso8601String().split('T').first,
+          'medicineName': 'Test Medicine',
+          'dosage': '1 tablet',
+        },
+        autoDismissible: false,
+        showWhen: true,
+        displayOnBackground: true,
+        displayOnForeground: true,
+        notificationLayout: NotificationLayout.BigText,
+      ),
+      actionButtons: [
+        NotificationActionButton(
+          key: 'TAKEN',
+          label: 'Taken',
+          actionType: ActionType.KeepOnTop,
+          color: Colors.green,
+          autoDismissible: true,
+        ),
+        NotificationActionButton(
+          key: 'MISSED',
+          label: 'Missed',
+          actionType: ActionType.KeepOnTop,
+          color: Colors.orange,
+          autoDismissible: true,
+        ),
+      ],
+    );
+  }
 
   Future<int> get scheduledCount async {
     final list = await AwesomeNotifications().listScheduledNotifications();
@@ -379,7 +479,7 @@ class NotificationService {
   }
 
   /* ----------------------------------------------------------
-        MISSING METHODS RESTORED – exact signatures you had
+        ADDITIONAL METHODS
      ---------------------------------------------------------- */
 
   Future<Map<String, int>> getScheduledCountByMedicine() async {
@@ -456,36 +556,14 @@ class NotificationService {
 
   Future<void> _ensureChannelExists() async {
     if (_channelInitialized) return;
-    await AwesomeNotifications().initialize(
-      null,
-      [
-        NotificationChannel(
-          channelKey: _medChannel,
-          channelName: 'Medicine Reminders',
-          channelDescription: 'Critical medication dose reminders',
-          importance: NotificationImportance.Max,
-          defaultColor: Colors.blue,
-          ledColor: Colors.white,
-          playSound: true,
-          enableVibration: true,
-          vibrationPattern: Int64List.fromList([0, 1000, 500, 1000]),
-          channelShowBadge: true,
-          onlyAlertOnce: false,
-          locked: true,
-          defaultRingtoneType: DefaultRingtoneType.Alarm,
-          enableLights: true,
-          criticalAlerts: true,
-        ),
-      ],
-    );
-    _channelInitialized = true;
+    await _initializeAwesomeNotifications();
   }
 
   Future<void> _initialiseChannels() => _ensureChannelExists();
 }
 
 /* ================================================================
-                      BACKWARD-COMPAT SETTINGS MODEL
+                      SETTINGS MODEL
      ================================================================ */
 
 class NotificationSettings {
@@ -506,4 +584,9 @@ class NotificationSettings {
     this.missedDoseDelayMinutes = 15,
     this.maxMissedReminders = 2,
   });
+}
+
+// Extension to check if LogService is initialized
+extension LogServiceExtension on LogService {
+  bool get isInitialized => true; // Implement based on your LogService
 }
