@@ -1,114 +1,31 @@
-<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- =====  PERMISSIONS  ===== -->
-    <!-- Basic app permissions -->
-    <uses-permission android:name="android.permission.INTERNET"/>
-    
-    <!-- Notification permissions (required for Android 13+) -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    
-    <!-- Exact alarm permissions (different requirements for different Android versions) -->
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
-    
-    <!-- Wake and screen permissions -->
-    <uses-permission android:name="android.permission.WAKE_LOCK"/>
-    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
-    
-    <!-- Boot and battery optimization -->
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
-    
-    <!-- Notification features -->
-    <uses-permission android:name="android.permission.VIBRATE"/>
-    
-    <!-- Foreground service (optional, only if you use AndroidForegroundService) -->
-    <!-- <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/> -->
 
-    <!-- =====  APPLICATION  ===== -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
     <application
-        android:label="Medstracker"
+        android:label="medstracker"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         
-        <!--  Main Flutter activity  -->
         <activity
             android:name=".MainActivity"
-            android:exported="true"
-            android:launchMode="singleTop"
-            android:theme="@style/LaunchTheme"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
-            android:hardwareAccelerated="true"
-            android:windowSoftInputMode="adjustResize"
-            android:showOnLockScreen="true"
-            android:turnScreenOn="true">
-            <meta-data
-                android:name="io.flutter.embedding.android.NormalTheme"
-                android:resource="@style/NormalTheme"/>
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
+            ...>
+            
+            <intent-filter>
+                <action android:name="FLUTTER_NOTIFICATION_CLICK" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
+            
         </activity>
-        
-        <!--  Full-screen dose activity (lock-screen transparent)  -->
-        <activity
-            android:name=".DoseActivity"
-            android:exported="false"
-            android:showOnLockScreen="true"
-            android:showWhenLocked="true"
-            android:turnScreenOn="true"
-            android:showForAllUsers="true"
-            android:excludeFromRecents="true"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
-        
-        <!--  === AWESOME NOTIFICATIONS RECEIVERS ===  -->
-        <!--  Scheduled notification receiver  -->
-        <receiver
-            android:name="me.carda.awesome_notifications.core.broadcasters.receivers.ScheduledNotificationReceiver"
-            android:exported="true"
-            android:enabled="true"/>
-       
-        <!--  Boot receiver to restore schedules after reboot  -->
-        <receiver
-            android:name="me.carda.awesome_notifications.core.broadcasters.receivers.RefreshSchedulesReceiver"
-            android:exported="true"
-            android:enabled="true"
-            android:permission="android.permission.RECEIVE_BOOT_COMPLETED">
-            <intent-filter android:priority="1000">
-                <action android:name="android.intent.action.BOOT_COMPLETED"/>
-                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
-                <category android:name="android.intent.category.DEFAULT"/>
-            </intent-filter>
-        </receiver>
-
-        <!--  Action button receiver for notification interactions  -->
-        <receiver 
-            android:name="me.carda.awesome_notifications.core.broadcasters.receivers.ActionButtonReceiver"
-            android:exported="true"
-            android:enabled="true"/>
-
-        <!--  Foreground service (optional - only add if using AndroidForegroundService)  -->
-        <!-- 
-        <service 
-            android:name="me.carda.awesome_notifications.core.services.ForegroundService"
-            android:enabled="true"
-            android:exported="false"
-            android:stopWithTask="true"
-            android:foregroundServiceType="specialUse">
-        </service>
-        -->
 
         <meta-data
-            android:name="flutterEmbedding"
-            android:value="2"/>
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="high_importance_channel" />
+            
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notification" />
+
     </application>
-    
-    <!--  TEXT-PROCESS QUERY (Flutter template)  -->
-    <queries>
-        <intent>
-            <action android:name="android.intent.action.PROCESS_TEXT"/>
-            <data android:mimeType="text/plain"/>
-        </intent>
-    </queries>
 </manifest>

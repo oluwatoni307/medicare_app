@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "327027256225",
+    "project_id": "projectbuddy-8607c",
+    "storage_bucket": "projectbuddy-8607c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:327027256225:android:97db4afe34dc7e3e7b39e0",
+        "android_client_info": {
+          "package_name": "com.example.medstracker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDi1mIPQ7K1ww2-SngszGXV3WWiVY3GcrY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:327027256225:android:6fbe9fd6ae5e85d37b39e0",
+        "android_client_info": {
+          "package_name": "com.example.project_buddy"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDi1mIPQ7K1ww2-SngszGXV3WWiVY3GcrY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
