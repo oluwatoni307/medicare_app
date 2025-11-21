@@ -1,6 +1,6 @@
+import 'package:flutter/foundation.dart' show kIsWeb;  // ADD THIS IMPORT
 import 'package:flutter/material.dart';
 import 'package:medicare_app/data/hive_init.dart';
-// import 'package:medicare_app/features/auth/auth_model.dart';
 import 'package:medicare_app/features/auth/service.dart';
 import 'package:medicare_app/features/auth/auth_viewmodel.dart';
 import 'package:medicare_app/features/notifications/service.dart';
@@ -9,14 +9,12 @@ import './theme.dart';
 import 'routes.dart' show AppRoutes;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-// Use your actual Supabase credentials
 String anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVjZWpya3lkanFqeW1zZXBnc3l6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwOTA5NTksImV4cCI6MjA2NzY2Njk1OX0.G8qm1CH6_dbp6T0SunrBEIzQXOA9lCrCwGTjKwwGfkE";
 String supabaseUrl = "https://ucejrkydjqjymsepgsyz.supabase.co";
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Handle plugin messages before framework is ready
   WidgetsBinding.instance.deferFirstFrame();
   
   try {
@@ -24,33 +22,39 @@ Future<void> main() async {
     await initHive();
     print('✅ Hive initialized successfully');
     
-    // Initialize notifications (uncomment when ready)
-    await NotificationService.instance.init();
-    
-    // Initialize Supabase
+    // Initialize Supabase BEFORE notifications
     await Supabase.initialize(
       url: supabaseUrl,
       anonKey: anonKey,
     );
     print('✅ Supabase initialized successfully');
     
+    // Initialize notifications ONLY on mobile/desktop (NOT on web)
+    if (!kIsWeb) {
+      print('📱 Initialising notification service...');
+      await NotificationService.instance.init();
+      print('✅ Notification service initialized');
+    } else {
+      print('⚠️ Web platform detected - notifications disabled');
+    }
+    
     // Register daily worker (with error handling)
-    try {
-      // await registerDailyWorker();
-      print('✅ Daily worker registered successfully');
-    } catch (e) {
-      print('⚠️ Daily worker registration failed: $e');
-      // Continue without daily worker for now
+    if (!kIsWeb) {
+      try {
+        // await registerDailyWorker();
+        print('✅ Daily worker registered successfully');
+      } catch (e) {
+        print('⚠️ Daily worker registration failed: $e');
+      }
     }
     
     print('✅ App initialization completed successfully');
     
-  } catch (e) {
+  } catch (e, stackTrace) {
     print('❌ App initialization failed: $e');
-    // Still run the app but show error state
+    print(stackTrace);
   }
 
-  // Allow the first frame to be drawn
   WidgetsBinding.instance.allowFirstFrame();
 
   runApp(const MyApp());
@@ -77,7 +81,7 @@ class MyApp extends StatelessWidget {
         title: 'Medstracker',
         theme: AppTheme.lightTheme,
         routes: AppRoutes.routes,
-        initialRoute: AppRoutes.splash, // Start with splash screen
+        initialRoute: AppRoutes.splash,
       ),
     );
   }
