@@ -6,6 +6,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   app_links
   awesome_notifications
   connectivity_plus
+  firebase_core
   permission_handler_windows
   sqlite3_flutter_libs
   url_launcher_windows

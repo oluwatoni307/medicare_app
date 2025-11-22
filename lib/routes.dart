@@ -22,7 +22,7 @@ class AppRoutes {
   static const String auth = '/auth';
   
   // Existing routes
-  static const String home = '/';  // Changed from '/' to '/home'
+  static const String home = '/'; 
   static const String new_medicine = '/new_medicine';
   static const String log = '/log';
   static const String edit_medication = '/edit';

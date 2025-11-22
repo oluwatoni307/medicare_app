@@ -14,7 +14,8 @@ class _SplashScreenState extends State<SplashScreen> {
     _checkAppState();
   }
 
-  Future<void> _checkAppState() async {
+  Future<void> 
+  _checkAppState() async {
     await Future.delayed(Duration(seconds: 2)); // Show splash
     
     // Check if user is already logged in
