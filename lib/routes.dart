@@ -10,19 +10,16 @@ import 'features/auth/view/onboard.dart';
 import 'features/auth/view/splash.dart';
 import 'features/log/log_view.dart';
 import 'features/analysis/analysis_view.dart';
-import 'features/notifications/notifications_view.dart';
 import 'features/profile/profile_view.dart';
-
-
 
 class AppRoutes {
   // Auth & Onboarding routes
   static const String splash = '/splash';
   static const String onboarding = '/onboarding';
   static const String auth = '/auth';
-  
+
   // Existing routes
-  static const String home = '/'; 
+  static const String home = '/';
   static const String new_medicine = '/new_medicine';
   static const String log = '/log';
   static const String edit_medication = '/edit';
@@ -33,18 +30,18 @@ class AppRoutes {
 
   static Map<String, WidgetBuilder> get routes => {
     // Auth & Onboarding routes
-    splash: (context) =>  SplashScreen(),
+    splash: (context) => SplashScreen(),
     onboarding: (context) => OnboardingScreen(),
-    auth: (context) =>  AuthScreen(),
-    
+    auth: (context) => AuthScreen(),
+
     // Existing routes
     home: (context) => const Homepage(),
     edit_medication: (context) => MedicationView(),
     medication_list: (context) => const MedicationListView(),
     new_medicine: (context) => MedicationView(),
-    log: (context) => LogView(medicineId: '270cb55f-bcd0-42cd-9f62-1d22eaaa2c1d'),
+    log: (context) =>
+        LogView(medicineId: '270cb55f-bcd0-42cd-9f62-1d22eaaa2c1d'),
     analysis: (context) => AnalysisDashboardView(),
-    notifications: (context) => NotificationSettingsView(),
     profile: (context) => ProfilePage(),
   };
 }

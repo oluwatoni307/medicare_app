@@ -165,7 +165,11 @@ class MedicationViewModel extends ChangeNotifier {
       }
 
       if (isEditMode && _medicationId != null) {
-        await _medicationService.updateMedication(_medicationId!, _medication);
+        await _medicationService.updateMedication(
+          _medicationId!,
+          _medication,
+          user.id,
+        );
       } else {
         _medication.id = null;
         _medication.id = await _medicationService.addMedication(

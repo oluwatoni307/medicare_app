@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import '../notifications/service.dart'; // Your Android-optimized NotificationService
+import '../notifications/service.dart'; // Supabase-backed NotificationService
+import '../notifications/notifications_model.dart';
 import '/data/models/med.dart'; // Your updated Hive Med model
 import '/data/models/log.dart';
 import 'AddMedication_model.dart';
@@ -37,17 +38,15 @@ class MedicationService {
 
       await _medsBox.add(hiveMed);
 
-      // 🔥 NEW: Schedule confirmation notification using your Android-optimized service
-      await NotificationService.instance.scheduleSimpleReminder(
-        medicineId: hiveMed.id,
-        scheduleId: '${hiveMed.id}_success',
-        medicineName: '${hiveMed.name} Added',
-        dosage: 'Medication saved - reminders will start soon',
-        doseTime: DateTime.now().add(const Duration(minutes: 2)),
+      // Send a lightweight confirmation/test reminder (Supabase-backed)
+      await NotificationService.instance.sendTestNotification(
+        userId: userId,
+        title: '${hiveMed.name} Added',
+        message: 'Medication saved - reminders will start soon',
       );
 
-      // Schedule all treatment notifications
-      await _scheduleNotificationsForMed(hiveMed);
+      // Schedule all treatment notifications using Supabase-backed reminders
+      await _scheduleNotificationsForMed(hiveMed, userId);
 
       return hiveMed.id;
     } catch (e) {
@@ -60,14 +59,20 @@ class MedicationService {
     await _ensureInitialized(); // Ensure boxes are initialized
     try {
       final hiveMeds = _medsBox.values.toList();
-      return hiveMeds.map((hiveMed) => _convertHiveMedToModel(hiveMed)).toList();
+      return hiveMeds
+          .map((hiveMed) => _convertHiveMedToModel(hiveMed))
+          .toList();
     } catch (e) {
       throw Exception('Get medications error: $e');
     }
   }
 
   /* ---------- UPDATE ---------- */
-  Future<void> updateMedication(String id, MedicationModel med) async {
+  Future<void> updateMedication(
+    String id,
+    MedicationModel med,
+    String userId,
+  ) async {
     await _ensureInitialized(); // Ensure boxes are initialized
     try {
       // Find and update the medication
@@ -86,9 +91,16 @@ class MedicationService {
 
           await _medsBox.putAt(i, updatedMed);
 
-          // 🔥 FIXED: Using correct NotificationService methods
-          await NotificationService.instance.cancelForMedicine(id);
-          await _scheduleNotificationsForMed(updatedMed);
+          // Update reminders via Supabase-backed service (delete then recreate)
+          await NotificationService.instance.updateReminders(
+            userId: userId,
+            medicineId: updatedMed.id,
+            medicineName: updatedMed.name,
+            dosage: updatedMed.dosage,
+            dailyTimes: updatedMed.scheduleTimes.cast<TimeOfDay>(),
+            durationDays:
+                updatedMed.endAt?.difference(updatedMed.startAt).inDays ?? 30,
+          );
           break;
         }
       }
@@ -102,8 +114,8 @@ class MedicationService {
     await _ensureInitialized(); // Ensure boxes are initialized
 
     try {
-      // Cancel all notifications for this medicine first
-      await NotificationService.instance.cancelForMedicine(id);
+      // Delete all reminders for this medicine in Supabase first
+      await NotificationService.instance.deleteReminders(id);
 
       for (int i = 0; i < _medsBox.length; i++) {
         final med = _medsBox.getAt(i);
@@ -120,26 +132,28 @@ class MedicationService {
   /* ---------- NOTIFICATION SCHEDULING ---------- */
 
   /// 🔥 UPDATED: Using your Android-optimized NotificationService methods
-  Future<void> _scheduleNotificationsForMed(Med med) async {
+  Future<void> _scheduleNotificationsForMed(Med med, String userId) async {
     try {
       // Convert TimeOfDay list directly (no parsing needed)
       final dailyTimes = med.scheduleTimes.cast<TimeOfDay>();
-      
+
       debugPrint('📱 Scheduling notifications for ${med.name}');
       debugPrint('Daily times: $dailyTimes'); // Debug
-      
-      final days = med.endAt?.difference(med.startAt).inDays ?? 30; // Default 30 days if indefinite
+
+      final days =
+          med.endAt?.difference(med.startAt).inDays ??
+          30; // Default 30 days if indefinite
       debugPrint('Duration: $days days'); // Debug
-      
-      // Use your Android-optimized bulk scheduling method
-      await NotificationService.instance.scheduleAllTreatmentReminders(
+      // Use Supabase-backed bulk creation of reminders
+      await NotificationService.instance.createReminders(
+        userId: userId,
         medicineId: med.id,
         medicineName: med.name,
         dosage: med.dosage,
         dailyTimes: dailyTimes,
         durationDays: days,
       );
-      
+
       debugPrint('✅ Successfully scheduled notifications for ${med.name}');
     } catch (e) {
       debugPrint('❌ Notification scheduling failed for ${med.name}: $e');
@@ -149,21 +163,27 @@ class MedicationService {
 
   /// Reschedule notifications with settings (for ViewModel compatibility)
   Future<void> rescheduleNotificationsForMed(
-    Med med, 
-    NotificationSettings settings
+    Med med,
+    NotificationSettingsModel settings,
+    String userId,
   ) async {
     try {
       final dailyTimes = med.scheduleTimes.cast<TimeOfDay>();
       final days = med.endAt?.difference(med.startAt).inDays ?? 30;
-      
-      await NotificationService.instance.rescheduleAllForMedicine(
-        medicineId: med.id,
-        medicineName: med.name,
-        dosage: med.dosage,
-        dailyTimes: dailyTimes,
-        durationDays: days,
-        settings: settings,
-      );
+
+      // Supabase-backed approach: delete existing reminders and recreate
+      if (settings.notificationsEnabled) {
+        await NotificationService.instance.updateReminders(
+          userId: userId,
+          medicineId: med.id,
+          medicineName: med.name,
+          dosage: med.dosage,
+          dailyTimes: dailyTimes,
+          durationDays: days,
+        );
+      } else {
+        await NotificationService.instance.deleteReminders(med.id);
+      }
     } catch (e) {
       debugPrint('❌ Notification rescheduling failed for ${med.name}: $e');
       rethrow;
@@ -175,7 +195,14 @@ class MedicationService {
   /// Get notification counts by medicine ID
   Future<Map<String, int>> getNotificationCounts() async {
     try {
-      return await NotificationService.instance.getScheduledCountByMedicine();
+      await _ensureInitialized();
+      final Map<String, int> counts = {};
+      final meds = _medsBox.values.toList();
+      for (final med in meds) {
+        final cnt = await NotificationService.instance.countForMedicine(med.id);
+        counts[med.id] = cnt;
+      }
+      return counts;
     } catch (e) {
       debugPrint('❌ Failed to get notification counts: $e');
       return {};
@@ -185,7 +212,7 @@ class MedicationService {
   /// Get total scheduled notifications count
   Future<int> getTotalScheduledNotifications() async {
     try {
-      return await NotificationService.instance.scheduledCount;
+      return await NotificationService.instance.totalScheduled();
     } catch (e) {
       debugPrint('❌ Failed to get total scheduled count: $e');
       return 0;
@@ -195,7 +222,9 @@ class MedicationService {
   /// Check if notifications are properly configured
   Future<bool> areNotificationsReady() async {
     try {
-      return await NotificationService.instance.hasPermissions;
+      // Check FCM token availability as a proxy for readiness
+      final token = await NotificationService.instance.fcmToken;
+      return token != null;
     } catch (e) {
       debugPrint('❌ Failed to check notification permissions: $e');
       return false;
@@ -203,9 +232,17 @@ class MedicationService {
   }
 
   /// Send test notification
-  Future<bool> sendTestNotification() async {
+  Future<bool> sendTestNotification(
+    String userId,
+    String title,
+    String message,
+  ) async {
     try {
-      return await NotificationService.instance.sendTestNotification();
+      return await NotificationService.instance.sendTestNotification(
+        userId: userId,
+        title: title,
+        message: message,
+      );
     } catch (e) {
       debugPrint('❌ Failed to send test notification: $e');
       return false;
@@ -218,16 +255,14 @@ class MedicationService {
     await _ensureInitialized(); // Ensure boxes are initialized
 
     try {
-      return _logsBox.values
-          .where((log) => log.medId == medId)
-          .toList();
+      return _logsBox.values.where((log) => log.medId == medId).toList();
     } catch (e) {
       throw Exception('Get logs error: $e');
     }
   }
 
   /* ---------- HELPER METHODS ---------- */
-  
+
   // Calculate end date from duration string
   DateTime? _calculateEndDate(DateTime startDate, String? duration) {
     if (duration == null || duration == 'indefinitely') {
@@ -243,13 +278,21 @@ class MedicationService {
         } else if (duration.contains('week')) {
           return startDate.add(Duration(days: number * 7));
         } else if (duration.contains('month')) {
-          return DateTime(startDate.year, startDate.month + number, startDate.day);
+          return DateTime(
+            startDate.year,
+            startDate.month + number,
+            startDate.day,
+          );
         } else if (duration.contains('year')) {
-          return DateTime(startDate.year + number, startDate.month, startDate.day);
+          return DateTime(
+            startDate.year + number,
+            startDate.month,
+            startDate.day,
+          );
         }
       }
     }
-    
+
     return startDate.add(const Duration(days: 7)); // Default 7 days
   }
 
@@ -262,8 +305,8 @@ class MedicationService {
       type: hiveMed.type,
       startDate: hiveMed.startAt,
       scheduleTimes: hiveMed.scheduleTimes, // Direct mapping
-      duration: hiveMed.endAt == null 
-          ? 'indefinitely' 
+      duration: hiveMed.endAt == null
+          ? 'indefinitely'
           : '${hiveMed.endAt!.difference(hiveMed.startAt).inDays} days',
     );
   }
@@ -271,43 +314,31 @@ class MedicationService {
   /* ---------- BATCH OPERATIONS ---------- */
 
   /// Reschedule all medications (useful after settings changes)
-  Future<void> rescheduleAllMedications(NotificationSettings settings) async {
+  Future<void> rescheduleAllMedications(
+    NotificationSettingsModel settings,
+  ) async {
     await _ensureInitialized();
-    
-    try {
-      final hiveMeds = _medsBox.values.toList();
-      
-      // Cancel all existing notifications
-      await NotificationService.instance.cancelAllNotifications();
-      
-      // Reschedule each medication if notifications are enabled
-      if (settings.notificationsEnabled) {
-        for (final med in hiveMeds) {
-          await rescheduleNotificationsForMed(med, settings);
-        }
-      }
-      
-      debugPrint('✅ Rescheduled notifications for ${hiveMeds.length} medications');
-    } catch (e) {
-      debugPrint('❌ Failed to reschedule all medications: $e');
-      throw Exception('Reschedule all medications error: $e');
-    }
+    // NOTE: This method now requires a `userId` to recreate reminders in Supabase.
+    // Callers should pass the `userId` and call `rescheduleAllMedications(settings, userId)`.
+    throw Exception('rescheduleAllMedications requires a userId parameter.');
   }
 
   /// Get medication statistics
   Future<Map<String, dynamic>> getMedicationStats() async {
     await _ensureInitialized();
-    
+
     try {
       final hiveMeds = _medsBox.values.toList();
       final notificationCounts = await getNotificationCounts();
       final totalScheduled = await getTotalScheduledNotifications();
-      
+
       return {
         'totalMedications': hiveMeds.length,
-        'activeMedications': hiveMeds.where((med) => 
-          med.endAt == null || med.endAt!.isAfter(DateTime.now())
-        ).length,
+        'activeMedications': hiveMeds
+            .where(
+              (med) => med.endAt == null || med.endAt!.isAfter(DateTime.now()),
+            )
+            .length,
         'totalScheduledNotifications': totalScheduled,
         'notificationsByMedicine': notificationCounts,
         'hasNotificationPermissions': await areNotificationsReady(),
