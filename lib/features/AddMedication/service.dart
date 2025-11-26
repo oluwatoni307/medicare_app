@@ -92,14 +92,13 @@ class MedicationService {
           await _medsBox.putAt(i, updatedMed);
 
           // Update reminders via Supabase-backed service (delete then recreate)
-          await NotificationService.instance.updateReminders(
+          await NotificationService.instance.updateRemindersWithExpiry(
             userId: userId,
             medicineId: updatedMed.id,
             medicineName: updatedMed.name,
             dosage: updatedMed.dosage,
             dailyTimes: updatedMed.scheduleTimes.cast<TimeOfDay>(),
-            durationDays:
-                updatedMed.endAt?.difference(updatedMed.startAt).inDays ?? 30,
+            expiresOn: updatedMed.endAt,
           );
           break;
         }
@@ -144,14 +143,14 @@ class MedicationService {
           med.endAt?.difference(med.startAt).inDays ??
           30; // Default 30 days if indefinite
       debugPrint('Duration: $days days'); // Debug
-      // Use Supabase-backed bulk creation of reminders
-      await NotificationService.instance.createReminders(
+      // Use Supabase-backed single-entry per time (backend handles recurrence)
+      await NotificationService.instance.createSingleReminderEntries(
         userId: userId,
         medicineId: med.id,
         medicineName: med.name,
         dosage: med.dosage,
         dailyTimes: dailyTimes,
-        durationDays: days,
+        expiresOn: med.endAt,
       );
 
       debugPrint('✅ Successfully scheduled notifications for ${med.name}');

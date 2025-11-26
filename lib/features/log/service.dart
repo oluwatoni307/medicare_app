@@ -1,20 +1,21 @@
 import 'package:hive_flutter/hive_flutter.dart';
-import '/data/models/med.dart'; // Hive Med with List<TimeOfDay> scheduleTimes
-import '/data/models/log.dart'; // Global Hive LogModel with takenScheduleIndices
-// Import the feature's private models to ensure type compatibility
-import 'log_model.dart' as feature; // Adjust path as needed
-import 'package:flutter/material.dart'; // For TimeOfDay, DateTime operations
+import '/data/models/med.dart';
+import '/data/models/log.dart';
+import 'log_model.dart' as feature;
+import 'package:flutter/material.dart';
 
 /// LogService acts as an adapter, presenting an API compatible with the old
 /// schedule-centric paradigm to the ViewModel, while internally using the
 /// new medication-centric Hive models.
 class LogService {
-  late Box<LogModel> _globalLogsBox; // Global Hive LogModel
+  late Box<LogModel> _globalLogsBox;
   late Box<Med> _medsBox;
 
   bool _isInitialized = false;
 
-  /// Ensures that Hive boxes are initialized before any operations.
+  /// Grace period after scheduled time before marking as missed
+  static const Duration GRACE_PERIOD = Duration(hours: 2);
+
   Future<void> _ensureInitialized() async {
     if (_isInitialized) return;
     _medsBox = Hive.box<Med>('meds');
@@ -22,23 +23,28 @@ class LogService {
     _isInitialized = true;
   }
 
-  /// Initializes the service. For backward compatibility.
   Future<void> init() async {
     await _ensureInitialized();
   }
 
-  // --- Single-Day Methods (Existing API) ---
+  // === SINGLE-DAY METHODS ===
 
   /// Get today's schedules for a medicine with their log status
-  Future<List<feature.ScheduleLogModelWithLog>> getScheduleLogsForMedicineAndDate({
+  /// Now includes time-based miss detection
+  Future<List<feature.ScheduleLogModelWithLog>>
+  getScheduleLogsForMedicineAndDate({
     required String medicineId,
-    required String date, // Format: YYYY-MM-DD
+    required String date,
   }) async {
     await _ensureInitialized();
 
     try {
       final targetDate = DateTime.parse(date);
-      final targetDateNormalized = DateTime(targetDate.year, targetDate.month, targetDate.day);
+      final targetDateNormalized = DateTime(
+        targetDate.year,
+        targetDate.month,
+        targetDate.day,
+      );
 
       Med? medication;
       try {
@@ -54,7 +60,9 @@ class LogService {
       LogModel? globalLog;
       try {
         globalLog = _globalLogsBox.values.firstWhere(
-          (log) => log.medId == medicineId && _isSameDay(log.date, targetDateNormalized),
+          (log) =>
+              log.medId == medicineId &&
+              _isSameDay(log.date, targetDateNormalized),
         );
       } on StateError {
         globalLog = null;
@@ -66,11 +74,16 @@ class LogService {
         final TimeOfDay timeOfDay = medication.scheduleTimes[i];
         final syntheticScheduleId = '${medication.id}_$i';
         final timeString = _formatTimeOfDayForApi(timeOfDay);
-        final startDateString = medication.startAt.toIso8601String().split('T')[0];
-        final endDateString = medication.endAt?.toIso8601String().split('T')[0] ??
-            DateTime(targetDateNormalized.year + 1, targetDateNormalized.month, targetDateNormalized.day)
-                .toIso8601String()
-                .split('T')[0];
+        final startDateString = medication.startAt.toIso8601String().split(
+          'T',
+        )[0];
+        final endDateString =
+            medication.endAt?.toIso8601String().split('T')[0] ??
+            DateTime(
+              targetDateNormalized.year + 1,
+              targetDateNormalized.month,
+              targetDateNormalized.day,
+            ).toIso8601String().split('T')[0];
 
         final scheduleLogModel = feature.ScheduleLogModel(
           id: syntheticScheduleId,
@@ -82,10 +95,27 @@ class LogService {
         );
 
         feature.LogModel? featureLogModel;
-        if (globalLog != null) {
-          final status = (globalLog.takenScheduleIndices.length > i && globalLog.takenScheduleIndices[i] == 1)
-              ? feature.LogStatus.taken
-              : feature.LogStatus.missed;
+
+        // TIME-AWARE STATUS LOGIC
+        if (globalLog != null && i < globalLog.takenScheduleIndices.length) {
+          feature.LogStatus status;
+
+          // Check if this is the 0.1% sentinel (placeholder from getLogsForMedicineAndRange)
+          if (globalLog.percent == 0.1) {
+            // 0.1% means no real log data exists
+            // Check if deadline has passed
+            if (_isPastDeadline(timeOfDay, targetDateNormalized)) {
+              status = feature.LogStatus.missed; // Implicit miss (time-based)
+            } else {
+              status = feature.LogStatus.notLogged; // Still pending
+            }
+          } else if (globalLog.takenScheduleIndices[i] == 1) {
+            // Explicitly marked as taken
+            status = feature.LogStatus.taken;
+          } else {
+            // Index is 0 with real log data = explicit miss
+            status = feature.LogStatus.missed;
+          }
 
           featureLogModel = feature.LogModel(
             id: '${globalLog.medId}_${globalLog.date.toIso8601String().split('T')[0]}_$i',
@@ -94,13 +124,28 @@ class LogService {
             status: status,
             createdAt: globalLog.date,
           );
+        } else {
+          // No global log exists at all for this medication on this date
+          // Check if deadline has passed to create implicit miss
+          if (_isPastDeadline(timeOfDay, targetDateNormalized)) {
+            featureLogModel = feature.LogModel(
+              id: 'implicit_miss_${medication.id}_${targetDateNormalized.toIso8601String().split('T')[0]}_$i',
+              scheduleId: syntheticScheduleId,
+              date: targetDateNormalized.toIso8601String().split('T')[0],
+              status: feature.LogStatus.missed,
+              createdAt: DateTime.now(),
+            );
+          }
+          // else: leave featureLogModel as null (not logged, within grace period or future)
         }
 
-        result.add(feature.ScheduleLogModelWithLog(
-          schedule: scheduleLogModel,
-          log: featureLogModel,
-          scheduleIndex: i,
-        ));
+        result.add(
+          feature.ScheduleLogModelWithLog(
+            schedule: scheduleLogModel,
+            log: featureLogModel,
+            scheduleIndex: i,
+          ),
+        );
       }
 
       return result;
@@ -109,18 +154,18 @@ class LogService {
     }
   }
 
-  /// Fetch medication name by ID
   Future<String?> getMedicineName(String medicineId) async {
     await _ensureInitialized();
     try {
-      final Med medication = _medsBox.values.firstWhere((med) => med.id == medicineId);
+      final Med medication = _medsBox.values.firstWhere(
+        (med) => med.id == medicineId,
+      );
       return medication.name;
     } on StateError {
       return null;
     }
   }
 
-  /// Create a new log entry
   Future<feature.LogModel> createLog({
     required String scheduleId,
     required String date,
@@ -130,7 +175,6 @@ class LogService {
     return await saveLog(scheduleId: scheduleId, status: status, date: date);
   }
 
-  /// Update an existing log by logId
   Future<feature.LogModel> updateLog({
     required String logId,
     required feature.LogStatus status,
@@ -151,10 +195,13 @@ class LogService {
     final syntheticScheduleId = '${medId}_$scheduleIndex';
     final logDate = DateTime.now().toIso8601String().split('T')[0];
 
-    return await saveLog(scheduleId: syntheticScheduleId, status: status, date: logDate);
+    return await saveLog(
+      scheduleId: syntheticScheduleId,
+      status: status,
+      date: logDate,
+    );
   }
 
-  /// Create or update a log (core logic)
   Future<feature.LogModel> saveLog({
     required String scheduleId,
     required feature.LogStatus status,
@@ -165,7 +212,11 @@ class LogService {
     try {
       final logDateStr = date ?? DateTime.now().toIso8601String().split('T')[0];
       final targetDate = DateTime.parse(logDateStr);
-      final targetDateNormalized = DateTime(targetDate.year, targetDate.month, targetDate.day);
+      final targetDateNormalized = DateTime(
+        targetDate.year,
+        targetDate.month,
+        targetDate.day,
+      );
 
       final parsedIds = _parseScheduleId(scheduleId);
       final medId = parsedIds.medId;
@@ -178,15 +229,20 @@ class LogService {
         throw Exception('Medication for schedule ID $scheduleId not found');
       }
 
-      if (scheduleIndex < 0 || scheduleIndex >= medication.scheduleTimes.length) {
-        throw Exception('Invalid schedule index $scheduleIndex in ID: $scheduleId');
+      if (scheduleIndex < 0 ||
+          scheduleIndex >= medication.scheduleTimes.length) {
+        throw Exception(
+          'Invalid schedule index $scheduleIndex in ID: $scheduleId',
+        );
       }
 
       LogModel? globalLog;
       int globalLogIndex = -1;
       for (int i = 0; i < _globalLogsBox.length; i++) {
         final log = _globalLogsBox.getAt(i);
-        if (log != null && log.medId == medId && _isSameDay(log.date, targetDateNormalized)) {
+        if (log != null &&
+            log.medId == medId &&
+            _isSameDay(log.date, targetDateNormalized)) {
           globalLog = log;
           globalLogIndex = i;
           break;
@@ -203,7 +259,9 @@ class LogService {
       }
 
       final updatedIndices = List<int>.from(globalLog.takenScheduleIndices);
-      updatedIndices[scheduleIndex] = (status == feature.LogStatus.taken) ? 1 : 0;
+      updatedIndices[scheduleIndex] = (status == feature.LogStatus.taken)
+          ? 1
+          : 0;
 
       final dosesTaken = updatedIndices.where((s) => s == 1).length;
       final newPercent = (dosesTaken / medication.scheduleTimes.length) * 100;
@@ -229,19 +287,26 @@ class LogService {
     }
   }
 
-  /// Get specific log for a schedule and date
-  Future<feature.LogModel?> getLog({required String scheduleId, String? date}) async {
+  Future<feature.LogModel?> getLog({
+    required String scheduleId,
+    String? date,
+  }) async {
     await _ensureInitialized();
     try {
       final logDateStr = date ?? DateTime.now().toIso8601String().split('T')[0];
       final parsedIds = _parseScheduleId(scheduleId);
       final medId = parsedIds.medId;
 
-      final logsForDate = await getScheduleLogsForMedicineAndDate(medicineId: medId, date: logDateStr);
+      final logsForDate = await getScheduleLogsForMedicineAndDate(
+        medicineId: medId,
+        date: logDateStr,
+      );
 
       feature.ScheduleLogModelWithLog? matchingScheduleLog;
       try {
-        matchingScheduleLog = logsForDate.firstWhere((sl) => sl.schedule.id == scheduleId);
+        matchingScheduleLog = logsForDate.firstWhere(
+          (sl) => sl.schedule.id == scheduleId,
+        );
       } on StateError {
         matchingScheduleLog = null;
       }
@@ -253,7 +318,6 @@ class LogService {
     }
   }
 
-  /// Delete a log entry (mark as not taken)
   Future<void> deleteLog({required String scheduleId, String? date}) async {
     await _ensureInitialized();
     try {
@@ -269,18 +333,27 @@ class LogService {
         throw Exception('Medication for schedule ID $scheduleId not found');
       }
 
-      if (scheduleIndex < 0 || scheduleIndex >= medication.scheduleTimes.length) {
-        throw Exception('Invalid schedule index $scheduleIndex in ID: $scheduleId');
+      if (scheduleIndex < 0 ||
+          scheduleIndex >= medication.scheduleTimes.length) {
+        throw Exception(
+          'Invalid schedule index $scheduleIndex in ID: $scheduleId',
+        );
       }
 
       final targetDate = DateTime.parse(logDateStr);
-      final targetDateNormalized = DateTime(targetDate.year, targetDate.month, targetDate.day);
+      final targetDateNormalized = DateTime(
+        targetDate.year,
+        targetDate.month,
+        targetDate.day,
+      );
 
       LogModel? globalLog;
       int globalLogIndex = -1;
       for (int i = 0; i < _globalLogsBox.length; i++) {
         final log = _globalLogsBox.getAt(i);
-        if (log != null && log.medId == medId && _isSameDay(log.date, targetDateNormalized)) {
+        if (log != null &&
+            log.medId == medId &&
+            _isSameDay(log.date, targetDateNormalized)) {
           globalLog = log;
           globalLogIndex = i;
           break;
@@ -308,9 +381,8 @@ class LogService {
     }
   }
 
-  // --- 🔥 NEW: Multi-Day Log Access Methods ---
+  // === MULTI-DAY LOG ACCESS METHODS ===
 
-  /// Get all logs for a specific medication (across all dates)
   Future<List<LogModel>> getAllLogsForMedicine(String medId) async {
     await _ensureInitialized();
     final allLogs = _globalLogsBox.values.toList();
@@ -318,109 +390,168 @@ class LogService {
     logsForMed.sort((a, b) => a.date.compareTo(b.date));
     return logsForMed;
   }
-/// Get logs for a medication within a date range (inclusive)
-/// Now includes zero-percent entries for days with no logs within the medication's active period
-Future<List<LogModel>> getLogsForMedicineAndRange(
-  String medId,
-  DateTime startDate,
-  DateTime endDate,
-) async {
-  await _ensureInitialized();
 
-  final startNormalized = DateTime(startDate.year, startDate.month, startDate.day);
-  final endNormalized = DateTime(endDate.year, endDate.month, endDate.day);
+  Future<List<LogModel>> getLogsForMedicineAndRange(
+    String medId,
+    DateTime startDate,
+    DateTime endDate,
+  ) async {
+    await _ensureInitialized();
 
-  // Get the medication to check its active period
-  Med? medication;
-  try {
-    medication = _medsBox.values.firstWhere((med) => med.id == medId);
-  } on StateError {
-    throw Exception('Medicine with ID $medId not found');
-  }
+    final startNormalized = DateTime(
+      startDate.year,
+      startDate.month,
+      startDate.day,
+    );
+    final endNormalized = DateTime(endDate.year, endDate.month, endDate.day);
 
-  // Determine the actual date range to consider (intersection of query range and medication active period)
-  final medStartDate = DateTime(medication.startAt.year, medication.startAt.month, medication.startAt.day);
-  final medEndDate = medication.endAt != null 
-      ? DateTime(medication.endAt!.year, medication.endAt!.month, medication.endAt!.day)
-      : null;
-
-  final actualStartDate = startNormalized.isBefore(medStartDate) ? medStartDate : startNormalized;
-  final actualEndDate = medEndDate != null && endNormalized.isAfter(medEndDate) 
-      ? medEndDate 
-      : endNormalized;
-
-  // If medication period doesn't overlap with query range, return empty
-  if (actualStartDate.isAfter(actualEndDate)) {
-    return [];
-  }
-
-  // Get existing logs in the range
-  final allLogs = _globalLogsBox.values.toList();
-  final existingLogs = allLogs.where((log) {
-    final logDate = DateTime(log.date.year, log.date.month, log.date.day);
-    return log.medId == medId &&
-           !logDate.isBefore(actualStartDate) &&
-           !logDate.isAfter(actualEndDate);
-  }).toList();
-
-  // Create a map of existing logs by date for quick lookup
-  final existingLogsByDate = <String, LogModel>{};
-  for (final log in existingLogs) {
-    final dateKey = log.date.toIso8601String().split('T')[0];
-    existingLogsByDate[dateKey] = log;
-  }
-
-  // Generate complete list including zero-percent days for the active period only
-  final completeLogsList = <LogModel>[];
-  
-  DateTime currentDate = actualStartDate;
-  while (!currentDate.isAfter(actualEndDate)) {
-    final dateKey = currentDate.toIso8601String().split('T')[0];
-    
-    if (existingLogsByDate.containsKey(dateKey)) {
-      // Use existing log
-      completeLogsList.add(existingLogsByDate[dateKey]!);
-    } else {
-      // Create 0.1% log for missing day within active medication period
-      // Using 0.1% to distinguish from actual 0% (missed all doses)
-      final notLoggedDayLog = LogModel(
-        medId: medId,
-        date: currentDate,
-        percent: 0.1,
-        takenScheduleIndices: List.filled(medication.scheduleTimes.length, 0),
-      );
-      completeLogsList.add(notLoggedDayLog);
+    Med? medication;
+    try {
+      medication = _medsBox.values.firstWhere((med) => med.id == medId);
+    } on StateError {
+      throw Exception('Medicine with ID $medId not found');
     }
-    
-    // Move to next day
-    currentDate = currentDate.add(Duration(days: 1));
+
+    final medStartDate = DateTime(
+      medication.startAt.year,
+      medication.startAt.month,
+      medication.startAt.day,
+    );
+    final medEndDate = medication.endAt != null
+        ? DateTime(
+            medication.endAt!.year,
+            medication.endAt!.month,
+            medication.endAt!.day,
+          )
+        : null;
+
+    final actualStartDate = startNormalized.isBefore(medStartDate)
+        ? medStartDate
+        : startNormalized;
+    final actualEndDate =
+        medEndDate != null && endNormalized.isAfter(medEndDate)
+        ? medEndDate
+        : endNormalized;
+
+    if (actualStartDate.isAfter(actualEndDate)) {
+      return [];
+    }
+
+    final allLogs = _globalLogsBox.values.toList();
+    final existingLogs = allLogs.where((log) {
+      final logDate = DateTime(log.date.year, log.date.month, log.date.day);
+      return log.medId == medId &&
+          !logDate.isBefore(actualStartDate) &&
+          !logDate.isAfter(actualEndDate);
+    }).toList();
+
+    final existingLogsByDate = <String, LogModel>{};
+    for (final log in existingLogs) {
+      final dateKey = log.date.toIso8601String().split('T')[0];
+      existingLogsByDate[dateKey] = log;
+    }
+
+    final completeLogsList = <LogModel>[];
+
+    DateTime currentDate = actualStartDate;
+    while (!currentDate.isAfter(actualEndDate)) {
+      final dateKey = currentDate.toIso8601String().split('T')[0];
+
+      if (existingLogsByDate.containsKey(dateKey)) {
+        completeLogsList.add(existingLogsByDate[dateKey]!);
+      } else {
+        final notLoggedDayLog = LogModel(
+          medId: medId,
+          date: currentDate,
+          percent: 0.1,
+          takenScheduleIndices: List.filled(medication.scheduleTimes.length, 0),
+        );
+        completeLogsList.add(notLoggedDayLog);
+      }
+
+      currentDate = currentDate.add(Duration(days: 1));
+    }
+
+    return completeLogsList;
   }
 
-  return completeLogsList;
-}
+  Future<List<LogModel>> getLogsForThisWeek(String medId) async {
+    final today = DateTime.now();
+    final weekday = today.weekday;
+    final monday = today.subtract(Duration(days: weekday - 1));
+    final sunday = monday.add(Duration(days: 6));
+    return await getLogsForMedicineAndRange(medId, monday, sunday);
+  }
 
-/// Get logs for the current week (Monday to Sunday) with zero-percent days
-Future<List<LogModel>> getLogsForThisWeek(String medId) async {
-  final today = DateTime.now();
-  final weekday = today.weekday; // 1=Mon, 7=Sun
-  final monday = today.subtract(Duration(days: weekday - 1));
-  final sunday = monday.add(Duration(days: 6));
-  return await getLogsForMedicineAndRange(medId, monday, sunday);
-}
-  // --- Internal Helper Methods ---
+  // === HELPER METHODS ===
+
+  /// Checks if a scheduled time has passed its deadline (scheduled time + grace period)
+  bool _isPastDeadline(TimeOfDay scheduledTime, DateTime date) {
+    final now = DateTime.now();
+
+    // Only check deadlines for today or past dates
+    final dateNormalized = DateTime(date.year, date.month, date.day);
+    final todayNormalized = DateTime(now.year, now.month, now.day);
+
+    // Future dates are never past deadline
+    if (dateNormalized.isAfter(todayNormalized)) {
+      return false;
+    }
+
+    // Past dates are always past deadline
+    if (dateNormalized.isBefore(todayNormalized)) {
+      return true;
+    }
+
+    // For today, check actual time
+    final scheduled = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      scheduledTime.hour,
+      scheduledTime.minute,
+    );
+
+    final deadline = scheduled.add(GRACE_PERIOD);
+
+    return now.isAfter(deadline);
+  }
+
+  /// Calculates the deadline for a scheduled time (scheduled + grace period)
+  DateTime _calculateDeadline(TimeOfDay scheduledTime, DateTime date) {
+    final scheduled = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      scheduledTime.hour,
+      scheduledTime.minute,
+    );
+
+    return scheduled.add(GRACE_PERIOD);
+  }
 
   bool _isMedicationActiveOnDate(Med med, DateTime targetDate) {
-    final startDate = DateTime(med.startAt.year, med.startAt.month, med.startAt.day);
+    final startDate = DateTime(
+      med.startAt.year,
+      med.startAt.month,
+      med.startAt.day,
+    );
     if (startDate.isAfter(targetDate)) return false;
     if (med.endAt != null) {
-      final endDate = DateTime(med.endAt!.year, med.endAt!.month, med.endAt!.day);
+      final endDate = DateTime(
+        med.endAt!.year,
+        med.endAt!.month,
+        med.endAt!.day,
+      );
       if (endDate.isBefore(targetDate)) return false;
     }
     return true;
   }
 
   bool _isSameDay(DateTime date1, DateTime date2) {
-    return date1.year == date2.year && date1.month == date2.month && date1.day == date2.day;
+    return date1.year == date2.year &&
+        date1.month == date2.month &&
+        date1.day == date2.day;
   }
 
   String _formatTimeOfDayForApi(TimeOfDay time) {
@@ -429,10 +560,14 @@ Future<List<LogModel>> getLogsForThisWeek(String medId) async {
 
   ({String medId, int index}) _parseScheduleId(String scheduleId) {
     final lastUnderscoreIndex = scheduleId.lastIndexOf('_');
-    if (lastUnderscoreIndex <= 0 || lastUnderscoreIndex == scheduleId.length - 1) {
+    if (lastUnderscoreIndex <= 0 ||
+        lastUnderscoreIndex == scheduleId.length - 1) {
       throw Exception('Invalid synthetic schedule ID format: $scheduleId');
     }
     final medId = scheduleId.substring(0, lastUnderscoreIndex);
+    if (medId.isEmpty) {
+      throw Exception('Invalid medId in schedule ID: $scheduleId');
+    }
     final indexStr = scheduleId.substring(lastUnderscoreIndex + 1);
     final index = int.tryParse(indexStr);
     if (index == null) {

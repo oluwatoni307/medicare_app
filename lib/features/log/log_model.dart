@@ -26,11 +26,7 @@ class LogModel {
   }
 
   Map<String, dynamic> toInsertJson() {
-    return {
-      'schedule_id': scheduleId,
-      'date': date,
-      'status': status.value,
-    };
+    return {'schedule_id': scheduleId, 'date': date, 'status': status.value};
   }
 
   @override
@@ -39,9 +35,16 @@ class LogModel {
   }
 }
 
+/// Status of a medication log entry
 enum LogStatus {
+  /// Dose was taken and logged by user
   taken('taken'),
-  missed('missed');
+
+  /// Dose was explicitly marked as missed by user, or deadline passed without logging
+  missed('missed'),
+
+  /// Dose has not been logged yet (future or within grace period)
+  notLogged('not_logged');
 
   const LogStatus(this.value);
   final String value;
@@ -52,6 +55,8 @@ enum LogStatus {
         return LogStatus.taken;
       case 'missed':
         return LogStatus.missed;
+      case 'not_logged':
+        return LogStatus.notLogged;
       default:
         throw ArgumentError('Invalid log status: $value');
     }
@@ -89,7 +94,6 @@ class ScheduleLogModel {
     );
   }
 
-  // Helper method to get display name for schedule
   String get displayName {
     final timeOfDay = _parseTimeOfDay(time);
     if (timeOfDay != null) {
@@ -98,10 +102,9 @@ class ScheduleLogModel {
       final minute = timeOfDay.minute.toString().padLeft(2, '0');
       return '$hour:$minute $period';
     }
-    return time; // fallback to original time string
+    return time;
   }
 
-  // Helper method to get schedule label (Morning, Afternoon, Evening)
   String get scheduleLabel {
     final timeOfDay = _parseTimeOfDay(time);
     if (timeOfDay != null) {
@@ -117,37 +120,34 @@ class ScheduleLogModel {
     return 'Dose';
   }
 
-  // Helper method to get full display text
   String get fullDisplayText {
     return '$scheduleLabel dose ($displayName)';
   }
 
   TimeOfDay? _parseTimeOfDay(String time) {
     try {
-      // Handle 24-hour format (14:30)
       if (time.contains(':') && !time.contains(' ')) {
         final parts = time.split(':');
         final hour = int.parse(parts[0]);
         final minute = int.parse(parts[1]);
         return TimeOfDay(hour: hour, minute: minute);
       }
-      
-      // Handle 12-hour format (2:30 PM)
+
       if (time.contains(' ')) {
         final parts = time.split(' ');
         final timePart = parts[0];
         final ampm = parts[1].toUpperCase();
-        
+
         final timeParts = timePart.split(':');
         var hour = int.parse(timeParts[0]);
         final minute = int.parse(timeParts[1]);
-        
+
         if (ampm == 'PM' && hour != 12) hour += 12;
         if (ampm == 'AM' && hour == 12) hour = 0;
-        
+
         return TimeOfDay(hour: hour, minute: minute);
       }
-      
+
       return null;
     } catch (e) {
       return null;
@@ -160,12 +160,11 @@ class ScheduleLogModel {
   }
 }
 
-// Simple model for UI dropdown items
 class ScheduleDisplayItem {
   final String scheduleId;
   final String displayText;
   final String time;
-  final LogStatus? currentStatus; // null if not logged yet
+  final LogStatus? currentStatus;
 
   ScheduleDisplayItem({
     required this.scheduleId,
@@ -178,7 +177,6 @@ class ScheduleDisplayItem {
   bool get isTaken => currentStatus == LogStatus.taken;
   bool get isMissed => currentStatus == LogStatus.missed;
 
-  // Display text with status indicator
   String get displayTextWithStatus {
     if (isTaken) return '$displayText ✅';
     if (isMissed) return '$displayText ❌';
@@ -191,78 +189,156 @@ class ScheduleDisplayItem {
   }
 }
 
-
 class ScheduleLogModelWithLog {
-  /// The schedule information.
   final ScheduleLogModel schedule;
-
-  /// The log entry for this specific schedule on a specific date.
-  /// Can be null if no log entry exists yet.
   final LogModel? log;
-
-  /// The index of this schedule time within the medication's List<TimeOfDay> scheduleTimes.
-  /// This is crucial for mapping to the takenScheduleIndices list in the global LogModel.
   final int scheduleIndex;
 
   ScheduleLogModelWithLog({
     required this.schedule,
     this.log,
-    required this.scheduleIndex, // Added required scheduleIndex parameter
+    required this.scheduleIndex,
   });
 
-  /// Indicates whether this schedule has been logged for the specific date.
   bool get isLogged => log != null;
-
-  /// Indicates whether the scheduled dose was marked as taken.
-  /// Returns false if not logged or if the log status is not 'taken'.
   bool get isTaken => log?.status == LogStatus.taken;
-
-  /// Indicates whether the scheduled dose was marked as missed.
-  /// Returns false if not logged or if the log status is not 'missed'.
   bool get isMissed => log?.status == LogStatus.missed;
+  bool get isNotLogged => log?.status == LogStatus.notLogged || log == null;
 
-  /// Indicates whether the scheduled time has passed for today.
+  /// Returns true if this is an explicit miss (user logged it as missed)
+  /// vs implicit miss (deadline passed without logging)
+  bool get isExplicitMiss {
+    if (!isMissed) return false;
+    // If log exists with missed status, it's explicit
+    // If log doesn't exist but status shows missed, it's implicit (time-based)
+    return isLogged;
+  }
+
+  /// Returns true if the scheduled time has passed for today
   bool get isPast {
-    // Parse the time string from the schedule using the existing helper
-    // ScheduleLogModel._parseTimeOfDay is private, so we need our own copy
-    // or make it static/public in ScheduleLogModel.
-    // Let's use a local copy for now, adapted for robustness.
     final timeOfDay = _parseTimeOfDay(schedule.time);
-    if (timeOfDay == null) {
-      // If we can't parse the time, we can't determine if it's past.
-      // It's safer to assume it's not past or handle as needed.
-      return false;
-    }
+    if (timeOfDay == null) return false;
 
     final now = TimeOfDay.now();
-    // Compare hours first
     if (timeOfDay.hour < now.hour) {
-      return true; // Scheduled hour is earlier than current hour
+      return true;
     } else if (timeOfDay.hour > now.hour) {
-      return false; // Scheduled hour is later than current hour
+      return false;
     }
-    // Hours are equal, compare minutes
     return timeOfDay.minute < now.minute;
   }
 
-  // Local helper to parse time string, adapted from ScheduleLogModel._parseTimeOfDay
-  // This makes the class self-contained for the isPast calculation.
+  /// Returns true if user can mark this dose as taken
+  /// (not in the future, and not already taken)
+  bool get canBeMarkedTaken {
+    if (isTaken) return false;
+    // Can't mark future doses as taken (unless we allow pre-logging)
+    // For now, allow marking even future doses for flexibility
+    return true;
+  }
+
+  /// Returns time remaining until deadline (scheduled time + grace period)
+  /// Returns null if already past deadline
+  Duration? get timeUntilDeadline {
+    final timeOfDay = _parseTimeOfDay(schedule.time);
+    if (timeOfDay == null) return null;
+
+    final now = DateTime.now();
+    final scheduled = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      timeOfDay.hour,
+      timeOfDay.minute,
+    );
+
+    // Add 2-hour grace period
+    final deadline = scheduled.add(const Duration(hours: 2));
+
+    if (now.isAfter(deadline)) return null;
+
+    return deadline.difference(now);
+  }
+
+  /// Returns time since deadline passed
+  /// Returns null if deadline hasn't passed yet
+  Duration? get timeSinceDeadline {
+    final timeOfDay = _parseTimeOfDay(schedule.time);
+    if (timeOfDay == null) return null;
+
+    final now = DateTime.now();
+    final scheduled = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      timeOfDay.hour,
+      timeOfDay.minute,
+    );
+
+    final deadline = scheduled.add(const Duration(hours: 2));
+
+    if (now.isBefore(deadline)) return null;
+
+    return now.difference(deadline);
+  }
+
+  /// Human-readable status text with context
+  String get statusDisplayText {
+    if (isTaken) {
+      return 'Taken ✅';
+    } else if (isMissed) {
+      if (isExplicitMiss) {
+        return 'Marked as missed ❌';
+      } else {
+        final since = timeSinceDeadline;
+        if (since != null) {
+          return 'Missed (${_formatDuration(since)} ago) ⏰';
+        }
+        return 'Missed ⏰';
+      }
+    } else {
+      // Not logged
+      if (isPast) {
+        final until = timeUntilDeadline;
+        if (until != null) {
+          return 'Pending (${_formatDuration(until)} left) ⏳';
+        } else {
+          return 'Missed (not logged) ⏰';
+        }
+      } else {
+        return 'Not yet time ⏳';
+      }
+    }
+  }
+
+  String _formatDuration(Duration duration) {
+    if (duration.inHours > 0) {
+      return '${duration.inHours}h';
+    } else if (duration.inMinutes > 0) {
+      return '${duration.inMinutes}min';
+    } else {
+      return 'just now';
+    }
+  }
+
   TimeOfDay? _parseTimeOfDay(String timeString) {
     try {
-      // Prioritize 24-hour format (14:30) as it's simpler and likely used internally
       if (timeString.contains(':') && !timeString.contains(' ')) {
         final parts = timeString.split(':');
         if (parts.length == 2) {
           final hour = int.tryParse(parts[0]);
           final minute = int.tryParse(parts[1]);
-          // Validate ranges
-          if (hour != null && minute != null && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+          if (hour != null &&
+              minute != null &&
+              hour >= 0 &&
+              hour <= 23 &&
+              minute >= 0 &&
+              minute <= 59) {
             return TimeOfDay(hour: hour, minute: minute);
           }
         }
       }
 
-      // Fallback to 12-hour format (2:30 PM) parsing if needed
       if (timeString.contains(' ')) {
         final parts = timeString.split(' ');
         if (parts.length == 2) {
@@ -277,19 +353,16 @@ class ScheduleLogModelWithLog {
             if (hour != null && minute != null && minute >= 0 && minute <= 59) {
               if (ampm == 'PM' && hour != 12) hour += 12;
               if (ampm == 'AM' && hour == 12) hour = 0;
-              // Validate final hour
               if (hour >= 0 && hour <= 23) {
-                 return TimeOfDay(hour: hour, minute: minute);
+                return TimeOfDay(hour: hour, minute: minute);
               }
             }
           }
         }
       }
 
-      // Parsing failed or format not recognized
       return null;
     } catch (e) {
-      // Catch any unexpected errors during parsing
       debugPrint('Error parsing time string "$timeString": $e');
       return null;
     }
@@ -300,4 +373,3 @@ class ScheduleLogModelWithLog {
     return 'ScheduleLogModelWithLog(schedule: $schedule, log: $log, scheduleIndex: $scheduleIndex)';
   }
 }
-// --- End of updated addition ---

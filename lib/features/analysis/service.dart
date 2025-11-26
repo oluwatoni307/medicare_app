@@ -1,23 +1,20 @@
 import 'package:hive_flutter/hive_flutter.dart';
-import '/data/models/med.dart'; // Hive Med
-import '/data/models/log.dart'; // Hive LogModel (with percent and takenScheduleIndices)
-// Import the analysis models if they are in a specific location, otherwise assume they are accessible
-// import '../analysis_model.dart'; // DailySummary, WeeklyInsight, DailyTile, ChartDataPoint
-// For now, we'll assume they are accessible or define minimal versions if needed inline for clarity.
-// Let's assume they are accessible.
+import '/data/models/med.dart';
+import '/data/models/log.dart';
 import 'analysis_model.dart';
-import 'package:flutter/material.dart'; // For TimeOfDay, DateTime operations
+import 'package:flutter/material.dart';
 
 /// Service to fetch and aggregate medication adherence data for analysis views.
-/// Works with the new local-first Hive models (Med, LogModel).
 class AnalysisService {
   late Box<Med> _medsBox;
-  late Box<LogModel> _logsBox; // Hive LogModel
-  
+  late Box<LogModel> _logsBox;
+
   bool _isInitialized = false;
 
-  /// Ensures that Hive boxes are initialized before any operations.
-  /// This method is safe to call multiple times.
+  /// Grace period after scheduled time before marking as missed
+  /// Must match LogService.GRACE_PERIOD for consistency
+  static const Duration GRACE_PERIOD = Duration(hours: 2);
+
   Future<void> _ensureInitialized() async {
     if (_isInitialized) return;
     _medsBox = Hive.box<Med>('meds');
@@ -25,156 +22,377 @@ class AnalysisService {
     _isInitialized = true;
   }
 
-  /// Initializes the service by getting references to the Hive boxes.
-  /// Must be called after Hive is initialized.
-  /// This method is kept for backward compatibility but now uses _ensureInitialized internally.
   Future<void> init() async {
     await _ensureInitialized();
   }
 
-  // === PUBLIC API METHODS (Aligned with original signatures where possible) ===
+  // === PUBLIC API METHODS ===
 
-  /// Returns today's schedules with current status for individual doses.
-  /// Output: List of DailyTile objects representing each scheduled dose.
+  /// Returns today's schedules with status for each dose.
+  /// Status: 'taken', 'missed', or 'not_logged'
+  /// NOW INCLUDES TIME-BASED MISS DETECTION
   Future<List<DailyTile>> getDailyData(String date) async {
-    await _ensureInitialized(); // Ensure boxes are initialized
-    
-    // Note: Original signature was getDailyData(String userId, String date).
-    // In local-first, user context might be implicit or handled by filtering Meds if they have userId.
-    // Assuming Meds are for the current user or user context is handled upstream.
+    await _ensureInitialized();
+
     try {
       final targetDate = DateTime.parse(date);
-      final targetDateNormalized = DateTime(targetDate.year, targetDate.month, targetDate.day);
-
+      final targetDateNormalized = DateTime(
+        targetDate.year,
+        targetDate.month,
+        targetDate.day,
+      );
       final result = <DailyTile>[];
 
-      // Iterate through all medications
       for (final med in _medsBox.values) {
-        // Check if the medication is active on the target date
-        if (_isMedicationActiveOnDate(med, targetDateNormalized)) {
-          // Find the log for this medication on this date
-          LogModel? logForDate;
-          try {
-            logForDate = _logsBox.values.firstWhere(
-              (log) => log.medId == med.id && _isSameDay(log.date, targetDateNormalized),
-            );
-          } on StateError {
-            // No log found for this med on this date. This is fine.
-            logForDate = null;
-          }
+        if (!_isMedicationActiveOnDate(med, targetDateNormalized)) continue;
 
-          // Iterate through each scheduled time for this medication
-          for (int i = 0; i < med.scheduleTimes.length; i++) {
-            final TimeOfDay scheduledTime = med.scheduleTimes[i];
-            String status;
+        LogModel? logForDate;
+        try {
+          logForDate = _logsBox.values.firstWhere(
+            (log) =>
+                log.medId == med.id &&
+                _isSameDay(log.date, targetDateNormalized),
+          );
+        } on StateError {
+          logForDate = null;
+        }
 
-            if (logForDate != null && i < logForDate.takenScheduleIndices.length) {
-              // Check the status from takenScheduleIndices
-              status = logForDate.takenScheduleIndices[i] == 1 ? 'taken' : 'not_logged';
-              // Optional: Apply date-based inference for 'missed' if needed
-              // if (logForDate.takenScheduleIndices[i] == 0 && targetDateNormalized.isBefore(DateTime.now())) {
-              //   status = 'missed'; // Or keep as not_logged based on your UI logic
-              // }
+        for (int i = 0; i < med.scheduleTimes.length; i++) {
+          final TimeOfDay scheduledTime = med.scheduleTimes[i];
+          String status;
+
+          // TIME-AWARE STATUS LOGIC
+          if (logForDate != null &&
+              i < logForDate.takenScheduleIndices.length) {
+            if (logForDate.takenScheduleIndices[i] == 1) {
+              status = 'taken';
+            } else if (logForDate.percent == 0.1) {
+              // 0.1% sentinel - check time
+              if (_isPastDeadline(scheduledTime, targetDateNormalized)) {
+                status = 'missed'; // Time-based miss
+              } else {
+                status = 'not_logged'; // Still pending
+              }
             } else {
-              // No log or index out of bounds (shouldn't happen if logs are consistent)
-              status = 'not_logged';
+              status = 'missed'; // Explicit miss
             }
-
-            result.add(DailyTile(
-              name: med.name,
-              time: _formatTimeOfDay(scheduledTime), // e.g., "08:00"
-              status: status,
-            ));
+          } else {
+            // No log - check time
+            if (_isPastDeadline(scheduledTime, targetDateNormalized)) {
+              status = 'missed'; // Time-based miss
+            } else {
+              status = 'not_logged'; // Future or within grace
+            }
           }
+
+          result.add(
+            DailyTile(
+              name: med.name,
+              time: _formatTimeOfDay(scheduledTime),
+              status: status,
+            ),
+          );
         }
       }
 
-      // Sort the result by time if needed (DailyTile doesn't have a direct time field for sorting,
-      // but the UI can sort by the `time` string if necessary, or we could add a DateTime field to DailyTile)
-      // For string time "HH:MM", default string sort works.
       result.sort((a, b) => a.time.compareTo(b.time));
-
       return result;
     } catch (e) {
       debugPrint('Error in AnalysisService.getDailyData: $e');
-      // Return empty list on error for UI stability, as per original design principle
       return [];
     }
   }
 
-  /// Returns week's schedules grouped by day abbreviation.
-  /// Simplified approach: Returns average adherence % per day.
-  /// Output: Map like {'mon': 85.7, 'tue': 100.0, ...}
-  /// Or, if UI needs more detail per day: Map<String, List<ChartDataPoint>> where value is list of meds with their %.
-  /// Let's go with average % per day for simplicity and leveraging the percent field.
-  Future<Map<String, double>> getWeeklyData(String startDate, String endDate) async {
-    await _ensureInitialized(); // Ensure boxes are initialized
-    
-    // Note: Original signature was getWeeklyData(String userId, String startDate, String endDate).
+  /// Returns daily pie chart data: taken/missed/not_logged percentages
+  /// NOW INCLUDES TIME-BASED MISS DETECTION
+  Future<Map<String, double>> getDailyPieChartData(String date) async {
+    await _ensureInitialized();
+
     try {
-      final startDt = DateTime.parse(startDate);
-      final endDt = DateTime.parse(endDate);
-      // Normalize dates
-      final startNormalized = DateTime(startDt.year, startDt.month, startDt.day);
-      final endNormalized = DateTime(endDt.year, endDt.month, endDt.day);
+      final targetDate = DateTime.parse(date);
+      final targetDateNormalized = DateTime(
+        targetDate.year,
+        targetDate.month,
+        targetDate.day,
+      );
 
-      final weekData = _emptyWeek<double>(); // Initialize with 0.0 or some default
+      int takenCount = 0;
+      int missedCount = 0;
+      int notLoggedCount = 0;
+      int totalSchedules = 0;
 
-      // Get logs within the date range
-      final relevantLogs = <LogModel>[];
-      for (final log in _logsBox.values) {
-        if (!log.date.isBefore(startNormalized) && !log.date.isAfter(endNormalized)) {
-          relevantLogs.add(log);
+      for (final med in _medsBox.values) {
+        if (!_isMedicationActiveOnDate(med, targetDateNormalized)) continue;
+
+        LogModel? log;
+        try {
+          log = _logsBox.values.firstWhere(
+            (l) =>
+                l.medId == med.id && _isSameDay(l.date, targetDateNormalized),
+          );
+        } on StateError {
+          log = null;
         }
-      }
 
-      // Group logs by date and calculate daily average adherence
-      final dailyAverages = <DateTime, List<double>>{}; // date -> list of percentages for that day
+        for (int i = 0; i < med.scheduleTimes.length; i++) {
+          final scheduledTime = med.scheduleTimes[i];
+          totalSchedules++;
 
-      for (final log in relevantLogs) {
-        final logDate = DateTime(log.date.year, log.date.month, log.date.day);
-        // Ensure the date key exists in the map
-        dailyAverages.putIfAbsent(logDate, () => <double>[]);
-        // Add the log's percent to the list for that date
-        dailyAverages[logDate]!.add(log.percent);
-      }
-
-      // Calculate the average for each day and populate the week map
-      dailyAverages.forEach((date, percentages) {
-        if (percentages.isNotEmpty) {
-          final sum = percentages.reduce((a, b) => a + b);
-          final average = sum / percentages.length;
-          final abbr = _getDayAbbreviation(date);
-          if (abbr != null) {
-            weekData[abbr] = average; // Update the average for the day
+          // TIME-AWARE COUNTING LOGIC
+          if (log != null && i < log.takenScheduleIndices.length) {
+            if (log.takenScheduleIndices[i] == 1) {
+              takenCount++;
+            } else if (log.percent == 0.1) {
+              // 0.1% sentinel - check time
+              if (_isPastDeadline(scheduledTime, targetDateNormalized)) {
+                missedCount++;
+              } else {
+                notLoggedCount++;
+              }
+            } else {
+              missedCount++;
+            }
+          } else {
+            // No log - check time
+            if (_isPastDeadline(scheduledTime, targetDateNormalized)) {
+              missedCount++;
+            } else {
+              notLoggedCount++;
+            }
           }
-        } else {
-            // If no percentages for a day, average remains 0.0 (or handle as needed)
-            // The map is already initialized with 0.0
         }
-      });
+      }
 
-      return weekData;
+      if (totalSchedules == 0) {
+        return {'taken': 0.0, 'missed': 0.0, 'not_logged': 0.0};
+      }
+
+      return {
+        'taken': (takenCount / totalSchedules) * 100,
+        'missed': (missedCount / totalSchedules) * 100,
+        'not_logged': (notLoggedCount / totalSchedules) * 100,
+      };
     } catch (e) {
-      debugPrint('Error in AnalysisService.getWeeklyData: $e');
-      return _emptyWeek<double>(); // Return empty structure on error
+      debugPrint('Error in AnalysisService.getDailyPieChartData: $e');
+      return {'taken': 0.0, 'missed': 0.0, 'not_logged': 0.0};
     }
   }
-  
-  /// Returns specific medicine's weekly schedules.
-  /// Returns average adherence % per day for the specified medicine.
-  Future<Map<String, double>> getWeeklyMedicineData(String medicineId, String startDate, String endDate) async {
-    await _ensureInitialized(); // Ensure boxes are initialized
-    
+
+  /// Returns complete weekly analysis data including overall adherence,
+  /// per-medication breakdown, and insights
+  /// TREATS 0.1% AS 0% FOR ADHERENCE (PAST DEADLINES ONLY)
+  Future<WeeklyAnalysisData> getWeeklyDataComplete(
+    String startDate,
+    String endDate,
+  ) async {
+    await _ensureInitialized();
+
     try {
       final startDt = DateTime.parse(startDate);
       final endDt = DateTime.parse(endDate);
-      final startNormalized = DateTime(startDt.year, startDt.month, startDt.day);
+      final startNormalized = DateTime(
+        startDt.year,
+        startDt.month,
+        startDt.day,
+      );
+      final endNormalized = DateTime(endDt.year, endDt.month, endDt.day);
+
+      final medications = _medsBox.values.toList();
+
+      if (medications.isEmpty) {
+        return WeeklyAnalysisData(
+          overallAdherence: {},
+          medications: [],
+          perMedicationData: {},
+          insight: WeeklyInsight(
+            overallAdherence: 0.0,
+            totalMedications: 0,
+            medicationAdherence: {},
+          ),
+        );
+      }
+
+      const dayKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+      final overallAdherence = <String, double>{};
+      final perMedicationData = <String, Map<String, double>>{};
+      final medicationNames = <String>[];
+
+      final today = DateTime.now();
+
+      for (final med in medications) {
+        medicationNames.add(med.name);
+        perMedicationData[med.name] = {};
+
+        final relevantLogs = <LogModel>[];
+        for (final log in _logsBox.values) {
+          if (log.medId == med.id &&
+              !log.date.isBefore(startNormalized) &&
+              !log.date.isAfter(endNormalized)) {
+            relevantLogs.add(log);
+          }
+        }
+
+        final logMap = <String, LogModel>{
+          for (final log in relevantLogs) _formatDate(log.date): log,
+        };
+
+        for (int i = 0; i < 7; i++) {
+          final dayDate = startNormalized.add(Duration(days: i));
+
+          if (dayDate.isAfter(today)) break;
+
+          final dayKey = dayKeys[i];
+          final dateKey = _formatDate(dayDate);
+
+          if (!_isMedicationActiveOnDate(med, dayDate)) continue;
+
+          if (_isSameDay(dayDate, today) && !logMap.containsKey(dateKey)) {
+            continue;
+          }
+
+          double dayPercent = 0.0;
+
+          if (logMap.containsKey(dateKey)) {
+            final log = logMap[dateKey]!;
+            // TIME-AWARE: Treat 0.1% as 0% only if all schedules are past deadline
+            if (log.percent == 0.1) {
+              // Check if this is a past date or today with all deadlines passed
+              bool allPast = true;
+              for (final schedTime in med.scheduleTimes) {
+                if (!_isPastDeadline(schedTime, dayDate)) {
+                  allPast = false;
+                  break;
+                }
+              }
+              dayPercent = allPast
+                  ? 0.0
+                  : 0.1; // Keep 0.1 if some doses still pending
+            } else {
+              dayPercent = log.percent;
+            }
+          }
+
+          perMedicationData[med.name]![dayKey] = dayPercent;
+        }
+      }
+
+      for (int i = 0; i < 7; i++) {
+        final dayDate = startNormalized.add(Duration(days: i));
+        if (dayDate.isAfter(today)) break;
+
+        final dayKey = dayKeys[i];
+
+        bool hasDayData = false;
+        for (final medName in medicationNames) {
+          if (perMedicationData[medName]!.containsKey(dayKey)) {
+            hasDayData = true;
+            break;
+          }
+        }
+
+        if (!hasDayData) continue;
+
+        double totalPercent = 0.0;
+        int medicationCount = 0;
+
+        for (final medName in medicationNames) {
+          if (perMedicationData[medName]!.containsKey(dayKey)) {
+            final percent = perMedicationData[medName]![dayKey]!;
+            // Exclude 0.1% from averages (still has pending doses)
+            if (percent != 0.1) {
+              totalPercent += percent;
+              medicationCount++;
+            }
+          }
+        }
+
+        overallAdherence[dayKey] = medicationCount > 0
+            ? totalPercent / medicationCount
+            : 0.0;
+      }
+
+      double overallSum = 0.0;
+      int dayCount = 0;
+
+      for (final percent in overallAdherence.values) {
+        overallSum += percent;
+        dayCount++;
+      }
+
+      final avgAdherence = dayCount > 0 ? overallSum / dayCount : 0.0;
+
+      final medicationAdherence = <String, double>{};
+      for (final medName in medicationNames) {
+        double medSum = 0.0;
+        int medDayCount = 0;
+
+        for (final dayPercent in perMedicationData[medName]!.values) {
+          // Exclude 0.1% from averages
+          if (dayPercent != 0.1) {
+            medSum += dayPercent;
+            medDayCount++;
+          }
+        }
+
+        medicationAdherence[medName] = medDayCount > 0
+            ? medSum / medDayCount
+            : 0.0;
+      }
+
+      final insight = WeeklyInsight(
+        overallAdherence: avgAdherence,
+        totalMedications: medications.length,
+        medicationAdherence: medicationAdherence,
+      );
+
+      return WeeklyAnalysisData(
+        overallAdherence: overallAdherence,
+        medications: medicationNames,
+        perMedicationData: perMedicationData,
+        insight: insight,
+      );
+    } catch (e) {
+      debugPrint('Error in AnalysisService.getWeeklyDataComplete: $e');
+      return WeeklyAnalysisData(
+        overallAdherence: {},
+        medications: [],
+        perMedicationData: {},
+        insight: WeeklyInsight(
+          overallAdherence: 0.0,
+          totalMedications: 0,
+          medicationAdherence: {},
+        ),
+      );
+    }
+  }
+
+  Future<Map<String, double>> getWeeklyData(
+    String startDate,
+    String endDate,
+  ) async {
+    final weeklyData = await getWeeklyDataComplete(startDate, endDate);
+    return weeklyData.overallAdherence;
+  }
+
+  Future<Map<String, double>> getWeeklyMedicineData(
+    String medicineId,
+    String startDate,
+    String endDate,
+  ) async {
+    await _ensureInitialized();
+
+    try {
+      final startDt = DateTime.parse(startDate);
+      final endDt = DateTime.parse(endDate);
+      final startNormalized = DateTime(
+        startDt.year,
+        startDt.month,
+        startDt.day,
+      );
       final endNormalized = DateTime(endDt.year, endDt.month, endDt.day);
 
       final weekData = _emptyWeek<double>();
 
-      // Get logs for the specific medicine within the date range
       final relevantLogs = <LogModel>[];
       for (final log in _logsBox.values) {
         if (log.medId == medicineId &&
@@ -184,21 +402,35 @@ class AnalysisService {
         }
       }
 
-      // Group logs by date and calculate daily average adherence (for this one med, it's just the log.percent)
-      final dailyAverages = <DateTime, double>{}; // date -> average percent (which is just the percent for one med)
+      Med? medication;
+      try {
+        medication = _medsBox.values.firstWhere((med) => med.id == medicineId);
+      } on StateError {
+        return weekData;
+      }
 
       for (final log in relevantLogs) {
         final logDate = DateTime(log.date.year, log.date.month, log.date.day);
-        dailyAverages[logDate] = log.percent; // One log per med per day, so percent is the value
-      }
 
-      // Populate the week map
-      dailyAverages.forEach((date, percent) {
-        final abbr = _getDayAbbreviation(date);
+        if (!_isMedicationActiveOnDate(medication, logDate)) continue;
+
+        final abbr = _getDayAbbreviation(logDate);
         if (abbr != null) {
-          weekData[abbr] = percent;
+          double percent = log.percent;
+          // TIME-AWARE: Check if all schedules past deadline
+          if (percent == 0.1) {
+            bool allPast = true;
+            for (final schedTime in medication.scheduleTimes) {
+              if (!_isPastDeadline(schedTime, logDate)) {
+                allPast = false;
+                break;
+              }
+            }
+            percent = allPast ? 0.0 : 0.1;
+          }
+          weekData[abbr] = percent == 0.1 ? 0.0 : percent;
         }
-      });
+      }
 
       return weekData;
     } catch (e) {
@@ -207,19 +439,43 @@ class AnalysisService {
     }
   }
 
-  /// Returns month's daily aggregated adherence percentages.
-  /// Output: Map<String, double> where key is date ("YYYY-MM-DD") and value is average adherence % for that day.
+  Future<List<DailySummary>> getMonthlySummaryData(String month) async {
+    final monthData = await getMonthlyData(month);
+
+    return monthData.entries.map((entry) {
+      return DailySummary(
+        date: entry.key,
+        adherencePercentage: entry.value,
+        hasActivity: true,
+      );
+    }).toList();
+  }
+
+  Future<List<ChartDataPoint>> getMonthlyChartData(String month) async {
+    final monthData = await getMonthlyData(month);
+
+    final result = monthData.entries.map((entry) {
+      return ChartDataPoint(date: entry.key, value: entry.value);
+    }).toList();
+
+    result.sort((a, b) => a.date.compareTo(b.date));
+    return result;
+  }
+
+  /// Returns month's daily aggregated adherence percentages
+  /// TREATS 0.1% AS 0% FOR PAST DATES
   Future<Map<String, double>> getMonthlyData(String month) async {
-    await _ensureInitialized(); // Ensure boxes are initialized
-    
-    // Note: Original signature was getMonthlyData(String userId, String month).
+    await _ensureInitialized();
+
     try {
       final monthStart = DateTime.parse('$month-01');
-      final monthEnd = DateTime(monthStart.year, monthStart.month + 1, 0); // Last day of the month
+      final monthEnd = DateTime(monthStart.year, monthStart.month + 1, 0);
 
       final result = <String, double>{};
+      final medications = _medsBox.values.toList();
 
-      // Get logs within the month
+      if (medications.isEmpty) return result;
+
       final relevantLogs = <LogModel>[];
       for (final log in _logsBox.values) {
         if (!log.date.isBefore(monthStart) && !log.date.isAfter(monthEnd)) {
@@ -227,97 +483,181 @@ class AnalysisService {
         }
       }
 
-      // Group logs by date and calculate daily average adherence
-      final dailyAverages = <DateTime, List<double>>{}; // date -> list of percentages
-
+      final dailyLogs = <DateTime, List<LogModel>>{};
       for (final log in relevantLogs) {
         final logDate = DateTime(log.date.year, log.date.month, log.date.day);
-        dailyAverages.putIfAbsent(logDate, () => <double>[]);
-        dailyAverages[logDate]!.add(log.percent);
+        dailyLogs.putIfAbsent(logDate, () => <LogModel>[]);
+        dailyLogs[logDate]!.add(log);
       }
 
-      // Calculate the average for each day and add to result map
-      dailyAverages.forEach((date, percentages) {
-        if (percentages.isNotEmpty) {
-          final sum = percentages.reduce((a, b) => a + b);
-          final average = sum / percentages.length;
-          final dateStr = _formatDate(date);
-          result[dateStr] = average;
+      dailyLogs.forEach((date, logs) {
+        double totalPercent = 0.0;
+        int medicationCount = 0;
+
+        for (final log in logs) {
+          Med? med;
+          try {
+            med = medications.firstWhere((m) => m.id == log.medId);
+          } on StateError {
+            continue;
+          }
+
+          if (!_isMedicationActiveOnDate(med, date)) continue;
+
+          double percent = log.percent;
+          // TIME-AWARE: Check if all schedules past deadline
+          if (percent == 0.1) {
+            bool allPast = true;
+            for (final schedTime in med.scheduleTimes) {
+              if (!_isPastDeadline(schedTime, date)) {
+                allPast = false;
+                break;
+              }
+            }
+            percent = allPast ? 0.0 : 0.1;
+          }
+
+          // Only count if not 0.1 (still has pending doses)
+          if (percent != 0.1) {
+            totalPercent += percent;
+            medicationCount++;
+          }
         }
-        // If percentages is empty, the date is not added to the result map, implying 0% or no data.
-        // The UI/ViewModel can handle missing dates as needed (e.g., show 0%).
+
+        if (medicationCount > 0) {
+          final dateStr = _formatDate(date);
+          result[dateStr] = totalPercent / medicationCount;
+        }
       });
 
       return result;
     } catch (e) {
       debugPrint('Error in AnalysisService.getMonthlyData: $e');
-      return {}; // Return empty map on error
+      return {};
     }
   }
-  
-  /// Returns specific medicine's monthly aggregates.
-  /// Output: Map<String, double> where key is date ("YYYY-MM-DD") and value is adherence % for that day.
-  Future<Map<String, double>> getMonthlyMedicineData(String medicineId, String month) async {
-    await _ensureInitialized(); // Ensure boxes are initialized
-    
-     try {
+
+  Future<Map<String, double>> getMonthlyMedicineData(
+    String medicineId,
+    String month,
+  ) async {
+    await _ensureInitialized();
+
+    try {
       final monthStart = DateTime.parse('$month-01');
       final monthEnd = DateTime(monthStart.year, monthStart.month + 1, 0);
 
       final result = <String, double>{};
 
-      // Get logs for the specific medicine within the month
+      Med? medication;
+      try {
+        medication = _medsBox.values.firstWhere((med) => med.id == medicineId);
+      } on StateError {
+        return result;
+      }
+
       for (final log in _logsBox.values) {
         if (log.medId == medicineId &&
             !log.date.isBefore(monthStart) &&
             !log.date.isAfter(monthEnd)) {
-            
-            final dateStr = _formatDate(log.date);
-            result[dateStr] = log.percent; // One log per med per day
+          final logDate = DateTime(log.date.year, log.date.month, log.date.day);
+
+          if (!_isMedicationActiveOnDate(medication, logDate)) continue;
+
+          double percent = log.percent;
+          // TIME-AWARE: Check if all schedules past deadline
+          if (percent == 0.1) {
+            bool allPast = true;
+            for (final schedTime in medication.scheduleTimes) {
+              if (!_isPastDeadline(schedTime, logDate)) {
+                allPast = false;
+                break;
+              }
+            }
+            percent = allPast ? 0.0 : 0.1;
+          }
+
+          final dateStr = _formatDate(logDate);
+          result[dateStr] = percent == 0.1 ? 0.0 : percent;
         }
       }
 
       return result;
     } catch (e) {
       debugPrint('Error in AnalysisService.getMonthlyMedicineData: $e');
-      return {}; 
+      return {};
     }
   }
 
   // === PRIVATE HELPER METHODS ===
 
-  /// Helper method to check if a medication is active on a specific date.
+  /// Checks if a scheduled time has passed its deadline (scheduled time + grace period)
+  /// Must match LogService._isPastDeadline() for consistency
+  bool _isPastDeadline(TimeOfDay scheduledTime, DateTime date) {
+    final now = DateTime.now();
+
+    final dateNormalized = DateTime(date.year, date.month, date.day);
+    final todayNormalized = DateTime(now.year, now.month, now.day);
+
+    // Future dates are never past deadline
+    if (dateNormalized.isAfter(todayNormalized)) {
+      return false;
+    }
+
+    // Past dates are always past deadline
+    if (dateNormalized.isBefore(todayNormalized)) {
+      return true;
+    }
+
+    // For today, check actual time
+    final scheduled = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      scheduledTime.hour,
+      scheduledTime.minute,
+    );
+
+    final deadline = scheduled.add(GRACE_PERIOD);
+
+    return now.isAfter(deadline);
+  }
+
   bool _isMedicationActiveOnDate(Med med, DateTime targetDate) {
-    final startDate = DateTime(med.startAt.year, med.startAt.month, med.startAt.day);
+    final startDate = DateTime(
+      med.startAt.year,
+      med.startAt.month,
+      med.startAt.day,
+    );
     if (startDate.isAfter(targetDate)) return false;
     if (med.endAt != null) {
-      final endDate = DateTime(med.endAt!.year, med.endAt!.month, med.endAt!.day);
+      final endDate = DateTime(
+        med.endAt!.year,
+        med.endAt!.month,
+        med.endAt!.day,
+      );
       if (endDate.isBefore(targetDate)) return false;
     }
     return true;
   }
 
-  /// Helper method to check if two dates are the same day.
   bool _isSameDay(DateTime date1, DateTime date2) {
     return date1.year == date2.year &&
-           date1.month == date2.month &&
-           date1.day == date2.day;
+        date1.month == date2.month &&
+        date1.day == date2.day;
   }
 
-  /// Helper to format TimeOfDay to HH:MM string.
   String _formatTimeOfDay(TimeOfDay time) {
     return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
   }
 
-  /// Helper to format DateTime to YYYY-MM-DD string.
   String _formatDate(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
-  /// Returns empty week structure initialized with a default value (e.g., 0.0 for double).
   static Map<String, T> _emptyWeek<T>() {
     return {
-      'mon': T == double ? 0.0 as T : null as T, // This is a trick, better to pass default value
+      'mon': T == double ? 0.0 as T : null as T,
       'tue': T == double ? 0.0 as T : null as T,
       'wed': T == double ? 0.0 as T : null as T,
       'thu': T == double ? 0.0 as T : null as T,
@@ -326,24 +666,9 @@ class AnalysisService {
       'sun': T == double ? 0.0 as T : null as T,
     };
   }
-  // Better helper for empty week with default value
-  // static Map<String, T> _emptyWeekWithValue<T>(T defaultValue) {
-  //   return {
-  //     'mon': defaultValue,
-  //     'tue': defaultValue,
-  //     'wed': defaultValue,
-  //     'thu': defaultValue,
-  //     'fri': defaultValue,
-  //     'sat': defaultValue,
-  //     'sun': defaultValue,
-  //   };
-  // }
 
-
-  /// Converts DateTime to day abbreviation.
   static String? _getDayAbbreviation(DateTime date) {
     try {
-      // DateTime.weekday: 1=Monday, 7=Sunday
       const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
       return days[date.weekday - 1];
     } catch (e) {

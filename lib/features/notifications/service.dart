@@ -74,6 +74,48 @@ class NotificationService {
     debugPrint("✅ Created reminders for $medicineName");
   }
 
+  /// Create one reminder entry per distinct time with an expiry date.
+  /// The backend will handle recurrence; we only insert one row per time.
+  Future<void> createSingleReminderEntries({
+    required String userId,
+    required String medicineId,
+    required String medicineName,
+    required String dosage,
+    required List<TimeOfDay> dailyTimes,
+    DateTime? expiresOn,
+  }) async {
+    final token = await fcmToken;
+    if (token == null) {
+      debugPrint("❌ Cannot create reminders: FCM token is null");
+      return;
+    }
+
+    final expiresOnString = expiresOn == null
+        ? null
+        : expiresOn.toIso8601String().split('T')[0];
+
+    for (final time in dailyTimes) {
+      final timeString =
+          '${time.hour.toString().padLeft(2, "0")}:${time.minute.toString().padLeft(2, "0")}:00';
+
+      final scheduleId =
+          '${medicineId}_${time.hour}${time.minute}_${expiresOn?.millisecondsSinceEpoch ?? DateTime.now().millisecondsSinceEpoch}';
+
+      await _supabase.from('reminder').insert({
+        'user_id': userId,
+        'fcm_token': token,
+        'medicine_id': medicineId,
+        'schedule_id': scheduleId,
+        'name': medicineName,
+        'dose': dosage,
+        'reminder_time': timeString,
+        'expires_on': expiresOnString,
+      });
+    }
+
+    debugPrint("✅ Created single reminder entries for $medicineName");
+  }
+
   /* ---------------------------------------------------------
    * DELETE REMINDERS
    * --------------------------------------------------------- */
@@ -103,6 +145,26 @@ class NotificationService {
       dosage: dosage,
       dailyTimes: dailyTimes,
       durationDays: durationDays,
+    );
+  }
+
+  /// Update reminders by deleting existing entries and creating single entries per time with an expiry date.
+  Future<void> updateRemindersWithExpiry({
+    required String userId,
+    required String medicineId,
+    required String medicineName,
+    required String dosage,
+    required List<TimeOfDay> dailyTimes,
+    DateTime? expiresOn,
+  }) async {
+    await deleteReminders(medicineId);
+    await createSingleReminderEntries(
+      userId: userId,
+      medicineId: medicineId,
+      medicineName: medicineName,
+      dosage: dosage,
+      dailyTimes: dailyTimes,
+      expiresOn: expiresOn,
     );
   }
 
