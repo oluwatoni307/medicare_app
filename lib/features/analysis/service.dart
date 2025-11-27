@@ -220,8 +220,7 @@ class AnalysisService {
       final today = DateTime.now();
 
       for (final med in medications) {
-        medicationNames.add(med.name);
-        perMedicationData[med.name] = {};
+        final tempMedData = <String, double>{};
 
         final relevantLogs = <LogModel>[];
         for (final log in _logsBox.values) {
@@ -272,7 +271,13 @@ class AnalysisService {
             }
           }
 
-          perMedicationData[med.name]![dayKey] = dayPercent;
+          tempMedData[dayKey] = dayPercent;
+        }
+
+        // Only add medication if it has at least one active day in the week
+        if (tempMedData.isNotEmpty) {
+          medicationNames.add(med.name);
+          perMedicationData[med.name] = tempMedData;
         }
       }
 
