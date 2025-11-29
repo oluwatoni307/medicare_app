@@ -7,7 +7,10 @@ import 'log_model.dart' as log;
 class LogView extends StatelessWidget {
   final String medicineId;
 
-  const LogView({super.key, required this.medicineId});
+  const LogView({
+    super.key,
+    required this.medicineId,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -22,18 +25,19 @@ class LogView extends StatelessWidget {
       child: Consumer<LogViewModel>(
         builder: (context, viewModel, child) {
           return Scaffold(
+            backgroundColor: AppTheme.primaryBlue,
             appBar: AppBar(
               title: Text(viewModel.medicineName ?? 'Loading...'),
-              backgroundColor: AppTheme.primaryBlue,
+              backgroundColor: Colors.transparent,
               elevation: 0,
             ),
             body: viewModel.isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : viewModel.hasError
-                ? _buildErrorState(context, viewModel)
-                : !viewModel.hasSchedules
-                ? _buildEmptyState(context, viewModel)
-                : _buildTimelineView(context, viewModel),
+                    ? _buildErrorState(context, viewModel)
+                    : !viewModel.hasSchedules
+                        ? _buildEmptyState(context, viewModel)
+                        : _buildContent(context, viewModel),
           );
         },
       ),
@@ -43,36 +47,34 @@ class LogView extends StatelessWidget {
   Widget _buildErrorState(BuildContext context, LogViewModel viewModel) {
     return Center(
       child: Padding(
-        padding: EdgeInsets.all(AppTheme.spacingL),
+        padding: const EdgeInsets.all(24.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
-            SizedBox(height: AppTheme.spacingM),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppTheme.error.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.error_outline, size: 32, color: AppTheme.error),
+            ),
+            const SizedBox(height: 16),
             Text(
-              'Oops! Something went wrong',
-              style: Theme.of(context).textTheme.titleLarge,
+              'Unable to load doses',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              viewModel.errorMessage ?? 'Something went wrong',
+              style: Theme.of(context).textTheme.bodySmall,
               textAlign: TextAlign.center,
             ),
-            SizedBox(height: AppTheme.spacingS),
-            Text(
-              viewModel.errorMessage ?? 'Unknown error',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: AppTheme.spacingL),
+            const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: () => viewModel.initialize(medicineId: medicineId),
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-              style: ElevatedButton.styleFrom(
-                padding: EdgeInsets.symmetric(
-                  horizontal: AppTheme.spacingL,
-                  vertical: AppTheme.spacingM,
-                ),
-              ),
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Try Again'),
             ),
           ],
         ),
@@ -83,28 +85,28 @@ class LogView extends StatelessWidget {
   Widget _buildEmptyState(BuildContext context, LogViewModel viewModel) {
     return Center(
       child: Padding(
-        padding: EdgeInsets.all(AppTheme.spacingL),
+        padding: const EdgeInsets.all(24.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.event_busy, size: 64, color: Colors.grey[400]),
-            SizedBox(height: AppTheme.spacingM),
-            Text(
-              'No schedules for today',
-              style: Theme.of(context).textTheme.titleLarge,
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppTheme.accent.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.check_circle_outline, size: 32, color: AppTheme.accent),
             ),
-            SizedBox(height: AppTheme.spacingS),
+            const SizedBox(height: 16),
             Text(
-              'There are no scheduled doses for ${viewModel.medicineName ?? "this medication"} today.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+              'No doses today',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'You\'re all set for ${viewModel.medicineName ?? "this medication"}',
+              style: Theme.of(context).textTheme.bodySmall,
               textAlign: TextAlign.center,
-            ),
-            SizedBox(height: AppTheme.spacingL),
-            OutlinedButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Go Back'),
             ),
           ],
         ),
@@ -112,65 +114,67 @@ class LogView extends StatelessWidget {
     );
   }
 
-  Widget _buildTimelineView(BuildContext context, LogViewModel viewModel) {
-    return RefreshIndicator(
-      onRefresh: viewModel.refresh,
-      child: CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          // Progress Header
-          SliverToBoxAdapter(child: _buildProgressHeader(context, viewModel)),
-
-          // Success/Error Message Banner
-          if (viewModel.hasSuccess || viewModel.hasError)
-            SliverToBoxAdapter(child: _buildMessageBanner(context, viewModel)),
-
-          // Dose Cards List
-          SliverPadding(
-            padding: EdgeInsets.all(AppTheme.spacingM),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate((context, index) {
-                final scheduleLog = viewModel.scheduleLogModels[index];
-                return _buildDoseCard(context, viewModel, scheduleLog);
-              }, childCount: viewModel.scheduleLogModels.length),
-            ),
+  Widget _buildContent(BuildContext context, LogViewModel viewModel) {
+    return Column(
+      children: [
+        // Progress header
+        _buildProgressHeader(context, viewModel),
+        
+        // Success/error message
+        if (viewModel.hasSuccess || viewModel.hasError)
+          _buildMessageBanner(context, viewModel),
+        
+        // Doses list
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            itemCount: viewModel.scheduleLogModels.length,
+            itemBuilder: (context, index) {
+              final scheduleLog = viewModel.scheduleLogModels[index];
+              return _buildDoseCard(context, viewModel, scheduleLog);
+            },
           ),
-
-          // Bottom Padding
-          SliverToBoxAdapter(child: SizedBox(height: AppTheme.spacingXL)),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
   Widget _buildProgressHeader(BuildContext context, LogViewModel viewModel) {
-    final progressPercent = viewModel.dailyProgressPercentage;
-    final isComplete = viewModel.isFullyCompleteToday;
-
+    final progress = viewModel.dailyProgressPercentage / 100;
+    final isComplete = progress == 1.0;
+    
     return Container(
+      margin: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(20.0),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isComplete
-              ? [const Color(0xFF4CAF50), const Color(0xFF81C784)]
-              : [AppTheme.primaryBlue, AppTheme.primaryBlue.withOpacity(0.8)],
-        ),
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withOpacity(0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ],
       ),
-      padding: EdgeInsets.all(AppTheme.spacingL),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: (isComplete ? AppTheme.accent : AppTheme.primaryAction).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  isComplete ? Icons.check_circle : Icons.medication,
+                  color: isComplete ? AppTheme.accent : AppTheme.primaryAction,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -178,135 +182,69 @@ class LogView extends StatelessWidget {
                     Text(
                       'Today\'s Progress',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    SizedBox(height: AppTheme.spacingXS),
+                    const SizedBox(height: 2),
                     Text(
                       viewModel.progressText,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.white.withOpacity(0.9),
-                      ),
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                 ),
               ),
-              Container(
-                padding: EdgeInsets.all(AppTheme.spacingM),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  children: [
-                    Text(
-                      '${progressPercent.toStringAsFixed(0)}%',
-                      style: Theme.of(context).textTheme.headlineMedium
-                          ?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                    ),
-                    if (isComplete)
-                      const Icon(
-                        Icons.celebration,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                  ],
+              Text(
+                '${progress.toStringAsFixed(0)}%',
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  color: isComplete ? AppTheme.accent : AppTheme.primaryAction,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ],
           ),
-          SizedBox(height: AppTheme.spacingM),
+          const SizedBox(height: 16),
           ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(6),
             child: LinearProgressIndicator(
-              value: progressPercent / 100,
+              value: progress,
               minHeight: 8,
-              backgroundColor: Colors.white.withOpacity(0.3),
-              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+              backgroundColor: AppTheme.surfaceMuted,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                isComplete ? AppTheme.accent : AppTheme.primaryAction,
+              ),
             ),
-          ),
-          SizedBox(height: AppTheme.spacingM),
-          Row(
-            children: [
-              _buildProgressChip(
-                context,
-                '✅ ${viewModel.dailyTakenDoses}',
-                const Color(0xFF4CAF50),
-              ),
-              SizedBox(width: AppTheme.spacingS),
-              _buildProgressChip(
-                context,
-                '❌ ${viewModel.dailyMissedDoses}',
-                const Color(0xFFFF9800),
-              ),
-              SizedBox(width: AppTheme.spacingS),
-              _buildProgressChip(
-                context,
-                '⏳ ${viewModel.dailyNotLoggedDoses}',
-                const Color(0xFF9E9E9E),
-              ),
-            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildProgressChip(BuildContext context, String label, Color color) {
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: AppTheme.spacingS,
-        vertical: AppTheme.spacingXS,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: Colors.white,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-    );
-  }
-
   Widget _buildMessageBanner(BuildContext context, LogViewModel viewModel) {
     final isSuccess = viewModel.hasSuccess;
-    final message = isSuccess
-        ? viewModel.successMessage!
-        : viewModel.errorMessage!;
+    final message = isSuccess ? viewModel.successMessage! : viewModel.errorMessage!;
 
     return Container(
-      margin: EdgeInsets.all(AppTheme.spacingM),
-      padding: EdgeInsets.all(AppTheme.spacingM),
+      margin: const EdgeInsets.symmetric(horizontal: 16.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       decoration: BoxDecoration(
         color: isSuccess
-            ? const Color(0xFF4CAF50).withOpacity(0.1)
-            : Colors.red[50],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isSuccess ? const Color(0xFF4CAF50) : Colors.red[300]!,
-          width: 1,
-        ),
+            ? AppTheme.accent.withOpacity(0.1)
+            : AppTheme.error.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(AppTheme.radiusM),
       ),
       child: Row(
         children: [
           Icon(
             isSuccess ? Icons.check_circle : Icons.error,
-            color: isSuccess ? const Color(0xFF4CAF50) : Colors.red[700],
+            color: isSuccess ? AppTheme.accent : AppTheme.error,
+            size: 20,
           ),
-          SizedBox(width: AppTheme.spacingM),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
               message,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: isSuccess ? const Color(0xFF2E7D32) : Colors.red[900],
+                color: isSuccess ? AppTheme.accent : AppTheme.error,
               ),
             ),
           ),
@@ -322,175 +260,152 @@ class LogView extends StatelessWidget {
   ) {
     final statusColor = viewModel.getDoseStatusColor(scheduleLog);
     final statusIcon = viewModel.getDoseStatusIcon(scheduleLog);
-    final statusText = viewModel.getDoseStatusText(scheduleLog);
+    final isTaken = scheduleLog.isTaken;
 
     return Container(
-      margin: EdgeInsets.only(bottom: AppTheme.spacingM),
+      margin: const EdgeInsets.only(bottom: 12.0),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            statusColor.withOpacity(0.05),
-            statusColor.withOpacity(0.02),
-          ],
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+        border: Border.all(
+          color: isTaken 
+              ? AppTheme.accent.withOpacity(0.2)
+              : AppTheme.surfaceMuted,
+          width: 1.5,
         ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: statusColor.withOpacity(0.3), width: 2),
         boxShadow: [
           BoxShadow(
-            color: statusColor.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
           ),
         ],
       ),
       child: Padding(
-        padding: EdgeInsets.all(AppTheme.spacingM),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header: Time and Status Icon
+            // Time and status row
             Row(
               children: [
                 Container(
-                  padding: EdgeInsets.all(AppTheme.spacingS),
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: statusColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(statusIcon, color: statusColor, size: 32),
+                  child: Icon(
+                    statusIcon,
+                    color: statusColor,
+                    size: 20,
+                  ),
                 ),
-                SizedBox(width: AppTheme.spacingM),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         scheduleLog.schedule.displayName,
-                        style: Theme.of(context).textTheme.headlineSmall
-                            ?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: statusColor,
-                            ),
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
+                      const SizedBox(height: 2),
                       Text(
                         scheduleLog.schedule.scheduleLabel,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey[600],
-                          fontWeight: FontWeight.w500,
+                          color: AppTheme.lightText,
                         ),
                       ),
                     ],
                   ),
                 ),
-              ],
-            ),
-
-            SizedBox(height: AppTheme.spacingM),
-
-            // Status Text
-            Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: AppTheme.spacingM,
-                vertical: AppTheme.spacingS,
-              ),
-              decoration: BoxDecoration(
-                color: statusColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(statusIcon, size: 16, color: statusColor),
-                  SizedBox(width: AppTheme.spacingS),
-                  Text(
-                    statusText,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                // Status badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    isTaken ? 'Done' : scheduleLog.isPast ? 'Pending' : 'Upcoming',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: statusColor,
                       fontWeight: FontWeight.w500,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 14),
+            
+            // Action buttons
+            if (isTaken)
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    viewModel.setSelectedSchedule(scheduleLog);
+                    await viewModel.submitLogAsNotTaken();
+                  },
+                  icon: const Icon(Icons.undo, size: 16),
+                  label: const Text('Undo'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.lightText,
+                    side: BorderSide(color: AppTheme.surfaceMuted, width: 1.5),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        viewModel.setSelectedSchedule(scheduleLog);
+                        await viewModel.submitLogAsTaken();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryAction,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppTheme.radiusM),
+                        ),
+                      ),
+                      child: const Text('Mark Taken'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () async {
+                        viewModel.setSelectedSchedule(scheduleLog);
+                        await viewModel.submitLogAsMissed();
+                      },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.darkText,
+                        side: BorderSide(color: AppTheme.surfaceMuted, width: 1.5),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppTheme.radiusM),
+                        ),
+                      ),
+                      child: const Text('Missed'),
                     ),
                   ),
                 ],
               ),
-            ),
-
-            SizedBox(height: AppTheme.spacingM),
-
-            // Action Buttons
-            _buildActionButtons(context, viewModel, scheduleLog, statusColor),
           ],
         ),
       ),
     );
-  }
-
-  Widget _buildActionButtons(
-    BuildContext context,
-    LogViewModel viewModel,
-    log.ScheduleLogModelWithLog scheduleLog,
-    Color statusColor,
-  ) {
-    if (scheduleLog.isTaken) {
-      // Undo button for taken doses
-      return SizedBox(
-        width: double.infinity,
-        child: OutlinedButton.icon(
-          onPressed: () async {
-            viewModel.setSelectedSchedule(scheduleLog);
-            await viewModel.submitLogAsNotTaken();
-          },
-          icon: const Icon(Icons.undo),
-          label: const Text('Undo'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: statusColor,
-            side: BorderSide(color: statusColor),
-            padding: EdgeInsets.symmetric(vertical: AppTheme.spacingM),
-          ),
-        ),
-      );
-    } else {
-      // Mark as Taken and Mark as Missed buttons
-      return Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: ElevatedButton.icon(
-              onPressed: viewModel.canTakeAction(scheduleLog)
-                  ? () async {
-                      viewModel.setSelectedSchedule(scheduleLog);
-                      await viewModel.submitLogAsTaken();
-                    }
-                  : null,
-              icon: const Icon(Icons.check),
-              label: const Text('Mark Taken'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4CAF50),
-                foregroundColor: Colors.white,
-                padding: EdgeInsets.symmetric(vertical: AppTheme.spacingM),
-              ),
-            ),
-          ),
-          SizedBox(width: AppTheme.spacingS),
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: viewModel.canTakeAction(scheduleLog)
-                  ? () async {
-                      viewModel.setSelectedSchedule(scheduleLog);
-                      await viewModel.submitLogAsMissed();
-                    }
-                  : null,
-              icon: const Icon(Icons.close),
-              label: const Text('Missed'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFFFF9800),
-                side: const BorderSide(color: Color(0xFFFF9800)),
-                padding: EdgeInsets.symmetric(vertical: AppTheme.spacingM),
-              ),
-            ),
-          ),
-        ],
-      );
-    }
   }
 }

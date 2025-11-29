@@ -5,6 +5,8 @@ import '/widgets/clock_widget.dart';
 import 'Home_viewmodel.dart';
 import '/routes.dart';
 import '/features/log/log_view.dart';
+import '/theme.dart';
+import 'Home_model.dart';
 
 class Homepage extends StatefulWidget {
   const Homepage({super.key});
@@ -51,13 +53,12 @@ class _HomepageState extends State<Homepage> {
               );
             }
 
-            // --------------  NEW SCROLLABLE LAYOUT  --------------
             return CustomScrollView(
               slivers: [
-                // 1. Sticky “header” (Hero + storyText)
+                // Hero Section
                 SliverToBoxAdapter(
                   child: Column(
-                    children:  [
+                    children: [
                       SizedBox(height: 10),
                       HeroSection(),
                       storyText(),
@@ -66,41 +67,38 @@ class _HomepageState extends State<Homepage> {
                   ),
                 ),
 
-                // 2. Medications (grid or empty-state)
+                // Today's Summary Card (conditional)
+                if (viewModel.showSummary)
+                  SliverToBoxAdapter(
+                    child: TodaysSummaryCard(summary: viewModel.todaysSummary!),
+                  ),
+
+                // Medications Grid
                 Consumer<HomeViewModel>(
                   builder: (_, viewModel, __) {
                     if (viewModel.medications.isEmpty) {
-                      // Empty-state card
                       return SliverToBoxAdapter(
-                        child: MedicationSection()._buildEmptyState(
-                          context,
-                          viewModel,
-                        ),
+                        child: _buildEmptyState(context, viewModel),
                       );
                     }
 
-                    // Real grid
                     return SliverPadding(
-  padding: const EdgeInsets.symmetric(horizontal: 10),
-  sliver: SliverGrid.count(
-    crossAxisCount: 3,
-    crossAxisSpacing: 5,
-    mainAxisSpacing: 5,
-    childAspectRatio: 1, // Changed from 1.2 to 0.9 (makes cards taller)
-    children: viewModel.medications.map((med) {
-      return MedicationBox(
-        medicationId: med.id,
-        medicationName: med.name,
-        medicationImageUrl: med.imageUrl,
-      );
-    }).toList(),
-  ),
-);
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      sliver: SliverGrid.count(
+                        crossAxisCount: 3,
+                        crossAxisSpacing: 6,
+                        mainAxisSpacing: 6,
+                        childAspectRatio: 0.95,
+                        children: viewModel.medications.map((med) {
+                          return MedicationBox(medication: med);
+                        }).toList(),
+                      ),
+                    );
                   },
                 ),
 
-                // 3. Extra padding so FAB never covers last row
-                 SliverToBoxAdapter(
+                // Bottom Padding
+                SliverToBoxAdapter(
                   child: SizedBox(height: 80),
                 ),
               ],
@@ -110,8 +108,114 @@ class _HomepageState extends State<Homepage> {
       ),
     );
   }
+
+  Widget _buildEmptyState(BuildContext context, HomeViewModel viewModel) {
+    // Check if has meds but no doses today
+    final hasSummary = viewModel.todaysSummary != null;
+    final noDosesToday = hasSummary && viewModel.todaysSummary!.totalDoses == 0;
+
+    if (noDosesToday) {
+      // Has medications but no doses scheduled today
+      return Container(
+        height: 300,
+        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 20),
+        child: Card(
+          elevation: 1,
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accent.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.event_available,
+                    size: 48,
+                    color: AppTheme.accent,
+                  ),
+                ),
+                SizedBox(height: 20),
+                Text(
+                  'All set for today',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'No doses scheduled for today.\nEnjoy your day!',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppTheme.lightText,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // No medications at all
+    return Container(
+      height: 300,
+      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 20),
+      child: Card(
+        elevation: 1,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceMuted,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppTheme.outline.withOpacity(0.2),
+                    width: 1,
+                  ),
+                ),
+                child: Icon(
+                  Icons.medication_liquid,
+                  size: 48,
+                  color: AppTheme.lightText,
+                ),
+              ),
+              SizedBox(height: 20),
+              Text(
+                'No medications yet',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Start tracking your medications to\nnever miss a dose again',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppTheme.lightText,
+                    ),
+              ),
+              SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () => Navigator.pushNamed(context, '/new_medicine'),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text(
+                  'Add Your First Medication',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
-// ---------- Everything below is *unchanged* ----------
+
+// Hero Section
 class HeroSection extends StatelessWidget {
   const HeroSection({super.key});
 
@@ -131,7 +235,7 @@ class HeroSection extends StatelessWidget {
                 final count = viewModel.homepageData.upcomingMedicationCount;
                 final medicationText = count == 1 ? 'medication' : 'medications';
                 return Text(
-                  'You have $count $medicationText to take\nregistered',
+                  '$count active $medicationText',
                   textAlign: TextAlign.right,
                   style: const TextStyle(
                     fontSize: 14,
@@ -146,8 +250,10 @@ class HeroSection extends StatelessWidget {
     );
   }
 }
+
+// Story Text
 Widget storyText() {
-  return  Padding(
+  return Padding(
     padding: EdgeInsets.all(10.0),
     child: RichText(
       text: TextSpan(
@@ -169,84 +275,88 @@ Widget storyText() {
   );
 }
 
-class MedicationSection extends StatelessWidget {
-  const MedicationSection({super.key});
+// Today's Summary Card
+class TodaysSummaryCard extends StatelessWidget {
+  final TodaysSummary summary;
+
+  const TodaysSummaryCard({super.key, required this.summary});
 
   @override
   Widget build(BuildContext context) {
-    // Nothing here anymore – logic moved into the CustomScrollView
-    return const SizedBox.shrink();
-  }
-
-  // keep the empty-state builder public so the Sliver can use it
-  Widget _buildEmptyState(BuildContext context, HomeViewModel viewModel) {
     return Container(
-      height: 300,
-      margin: const EdgeInsets.symmetric(vertical: 20),
+      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       child: Card(
-        elevation: 1,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Container(
-          padding: const EdgeInsets.all(24),
+        elevation: 2,
+        child: Padding(
+          padding: EdgeInsets.all(AppTheme.spacingM),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .outline
-                        .withOpacity(0.2),
-                    width: 1,
+              // Title and Percentage
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Today\'s Progress',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: AppTheme.darkText,
+                        ),
                   ),
-                ),
-                child: Icon(
-                  Icons.medication_liquid,
-                  size: 48,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+                  Text(
+                    '${summary.overallPercent.toStringAsFixed(0)}%',
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                          color: AppTheme.primaryAction,
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 20),
-              Text(
-                'No medications yet',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Start tracking your medications to\nnever miss a dose again',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: () => Navigator.pushNamed(context, '/new_medicine'),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text(
-                  'Add Your First Medication',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                ),
-                style: ElevatedButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(25),
+              
+              SizedBox(height: AppTheme.spacingXS),
+              
+              // Progress Bar
+              ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: Container(
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceHover,
+                  ),
+                  child: FractionallySizedBox(
+                    alignment: Alignment.centerLeft,
+                    widthFactor: (summary.overallPercent / 100).clamp(0.0, 1.0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [AppTheme.primaryAction, AppTheme.accent],
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
+              
+              SizedBox(height: AppTheme.spacingS),
+              
+              // Doses Text
+              Text(
+                '${summary.takenDoses} of ${summary.totalDoses} doses',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppTheme.lightText,
+                    ),
+              ),
+              
+              // Next Dose Info (if available)
+              if (summary.nextDoseInfo != null) ...[
+                SizedBox(height: AppTheme.spacingXS),
+                Text(
+                  'Next: ${summary.nextDoseInfo}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppTheme.lightText,
+                        fontStyle: FontStyle.italic,
+                      ),
+                ),
+              ],
             ],
           ),
         ),
@@ -255,61 +365,112 @@ class MedicationSection extends StatelessWidget {
   }
 }
 
+// Medication Box with Status Badge
 class MedicationBox extends StatelessWidget {
-  final String medicationId;
-  final String medicationName;
-  final String medicationImageUrl;
+  final MedicationInfo medication;
 
   const MedicationBox({
     super.key,
-    required this.medicationId,
-    required this.medicationName,
-    required this.medicationImageUrl,
+    required this.medication,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => LogView(medicineId: medicationId),
+    return Opacity(
+      opacity: medication.cardOpacity,
+      child: GestureDetector(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => LogView(medicineId: medication.id),
+            ),
+          );
+        },
+        child: Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.radiusM),
           ),
-        );
-      },
-      child: Card(
-        elevation: 4,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
+          child: Stack(
             children: [
-              Image.asset(
-                medicationImageUrl,
-                height: 36,
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) =>
-                    const Icon(Icons.medication, size: 36, color: Colors.grey),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                medicationName,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+              // Main Content
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Image.asset(
+                      medication.imageUrl,
+                      height: 36,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const Icon(
+                        Icons.medication,
+                        size: 36,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      medication.name,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
+              ),
+              
+              // Status Badge (top-right)
+              Positioned(
+                top: 6,
+                right: 6,
+                child: _buildStatusBadge(),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge() {
+    final badgeText = medication.displayBadge;
+    
+    return Container(
+      width: 24,
+      height: 24,
+      decoration: BoxDecoration(
+        color: medication.badgeBackgroundColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: medication.badgeBorderColor,
+          width: 1,
+        ),
+      ),
+      child: Center(
+        child: badgeText != null
+            ? Text(
+                badgeText,
+                style: TextStyle(
+                  fontSize: badgeText == '✓' || badgeText == '—' ? 12 : 10,
+                  fontWeight: FontWeight.w500,
+                  color: medication.badgeColor,
+                ),
+              )
+            : Container(
+                width: 4,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: medication.badgeColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
       ),
     );
   }
