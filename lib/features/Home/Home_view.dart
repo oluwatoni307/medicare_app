@@ -98,9 +98,7 @@ class _HomepageState extends State<Homepage> {
                 ),
 
                 // Bottom Padding
-                SliverToBoxAdapter(
-                  child: SizedBox(height: 80),
-                ),
+                SliverToBoxAdapter(child: SizedBox(height: 80)),
               ],
             );
           },
@@ -147,9 +145,9 @@ class _HomepageState extends State<Homepage> {
                 Text(
                   'No doses scheduled for today.\nEnjoy your day!',
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppTheme.lightText,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: AppTheme.lightText),
                 ),
               ],
             ),
@@ -175,7 +173,9 @@ class _HomepageState extends State<Homepage> {
                   color: AppTheme.surfaceMuted,
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: AppTheme.outline.withOpacity(0.2),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.outline.withOpacity(0.2),
                     width: 1,
                   ),
                 ),
@@ -194,9 +194,9 @@ class _HomepageState extends State<Homepage> {
               Text(
                 'Start tracking your medications to\nnever miss a dose again',
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppTheme.lightText,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: AppTheme.lightText),
               ),
               SizedBox(height: 24),
               ElevatedButton.icon(
@@ -233,7 +233,9 @@ class HeroSection extends StatelessWidget {
             child: Consumer<HomeViewModel>(
               builder: (context, viewModel, _) {
                 final count = viewModel.homepageData.upcomingMedicationCount;
-                final medicationText = count == 1 ? 'medication' : 'medications';
+                final medicationText = count == 1
+                    ? 'medication'
+                    : 'medications';
                 return Text(
                   '$count active $medicationText',
                   textAlign: TextAlign.right,
@@ -260,15 +262,14 @@ Widget storyText() {
         style: TextStyle(fontSize: 17, color: Colors.black),
         children: [
           TextSpan(
-            text: "Don't wait! Every reminder brings you closer to a healthier, stress-free life. ",
+            text:
+                "Don't wait! Every reminder brings you closer to a healthier, stress-free life. ",
           ),
           TextSpan(
             text: "Tap the + button",
             style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
           ),
-          TextSpan(
-            text: " to start managing your medications effortlessly.",
-          ),
+          TextSpan(text: " to start managing your medications effortlessly."),
         ],
       ),
     ),
@@ -298,30 +299,28 @@ class TodaysSummaryCard extends StatelessWidget {
                 children: [
                   Text(
                     'Today\'s Progress',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: AppTheme.darkText,
-                        ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.titleMedium?.copyWith(color: AppTheme.darkText),
                   ),
                   Text(
                     '${summary.overallPercent.toStringAsFixed(0)}%',
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          color: AppTheme.primaryAction,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      color: AppTheme.primaryAction,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ],
               ),
-              
+
               SizedBox(height: AppTheme.spacingXS),
-              
+
               // Progress Bar
               ClipRRect(
                 borderRadius: BorderRadius.circular(2),
                 child: Container(
                   height: 4,
-                  decoration: BoxDecoration(
-                    color: AppTheme.surfaceHover,
-                  ),
+                  decoration: BoxDecoration(color: AppTheme.surfaceHover),
                   child: FractionallySizedBox(
                     alignment: Alignment.centerLeft,
                     widthFactor: (summary.overallPercent / 100).clamp(0.0, 1.0),
@@ -335,26 +334,26 @@ class TodaysSummaryCard extends StatelessWidget {
                   ),
                 ),
               ),
-              
+
               SizedBox(height: AppTheme.spacingS),
-              
+
               // Doses Text
               Text(
                 '${summary.takenDoses} of ${summary.totalDoses} doses',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppTheme.lightText,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: AppTheme.lightText),
               ),
-              
+
               // Next Dose Info (if available)
               if (summary.nextDoseInfo != null) ...[
                 SizedBox(height: AppTheme.spacingXS),
                 Text(
                   'Next: ${summary.nextDoseInfo}',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppTheme.lightText,
-                        fontStyle: FontStyle.italic,
-                      ),
+                    color: AppTheme.lightText,
+                    fontStyle: FontStyle.italic,
+                  ),
                 ),
               ],
             ],
@@ -369,10 +368,7 @@ class TodaysSummaryCard extends StatelessWidget {
 class MedicationBox extends StatelessWidget {
   final MedicationInfo medication;
 
-  const MedicationBox({
-    super.key,
-    required this.medication,
-  });
+  const MedicationBox({super.key, required this.medication});
 
   @override
   Widget build(BuildContext context) {
@@ -425,13 +421,9 @@ class MedicationBox extends StatelessWidget {
                   ],
                 ),
               ),
-              
+
               // Status Badge (top-right)
-              Positioned(
-                top: 6,
-                right: 6,
-                child: _buildStatusBadge(),
-              ),
+              Positioned(top: 6, right: 6, child: _buildStatusBadge()),
             ],
           ),
         ),
@@ -441,17 +433,14 @@ class MedicationBox extends StatelessWidget {
 
   Widget _buildStatusBadge() {
     final badgeText = medication.displayBadge;
-    
+
     return Container(
       width: 24,
       height: 24,
       decoration: BoxDecoration(
         color: medication.badgeBackgroundColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: medication.badgeBorderColor,
-          width: 1,
-        ),
+        border: Border.all(color: medication.badgeBorderColor, width: 1),
       ),
       child: Center(
         child: badgeText != null
