@@ -14,7 +14,7 @@ class MedicationListView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return ChangeNotifierProvider(
       create: (_) => MedicationListViewModel(),
       child: DefaultTabController(
@@ -115,8 +115,20 @@ class MedicationListView extends StatelessWidget {
                 onRefresh: () => viewModel.refreshMedications(),
                 child: TabBarView(
                   children: [
-                    _buildMedicationList(context, viewModel, viewModel.activeMedications.cast<Med>(), 'No active medications yet.', true),
-                    _buildMedicationList(context, viewModel, viewModel.completedMedications.cast<Med>(), 'No completed medications.', false),
+                    _buildMedicationList(
+                      context,
+                      viewModel,
+                      viewModel.activeMedications.cast<Med>(),
+                      'No active medications yet.',
+                      true,
+                    ),
+                    _buildMedicationList(
+                      context,
+                      viewModel,
+                      viewModel.completedMedications.cast<Med>(),
+                      'No completed medications.',
+                      false,
+                    ),
                   ],
                 ),
               );
@@ -135,7 +147,10 @@ class MedicationListView extends StatelessWidget {
     bool isActiveTab,
   ) {
     if (medications.isEmpty) {
-      return EmptyMedicationState(message: emptyMessage, isActiveTab: isActiveTab);
+      return EmptyMedicationState(
+        message: emptyMessage,
+        isActiveTab: isActiveTab,
+      );
     }
 
     return ListView.separated(
@@ -159,7 +174,11 @@ class EmptyMedicationState extends StatelessWidget {
   final String message;
   final bool isActiveTab;
 
-  const EmptyMedicationState({super.key, required this.message, required this.isActiveTab});
+  const EmptyMedicationState({
+    super.key,
+    required this.message,
+    required this.isActiveTab,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -176,7 +195,9 @@ class EmptyMedicationState extends StatelessWidget {
               shape: BoxShape.circle,
             ),
             child: Icon(
-              isActiveTab ? Icons.medication_liquid : Icons.check_circle_outline,
+              isActiveTab
+                  ? Icons.medication_liquid
+                  : Icons.check_circle_outline,
               size: 40,
               color: theme.colorScheme.secondary,
             ),
@@ -191,7 +212,9 @@ class EmptyMedicationState extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            isActiveTab ? 'Add your first medication to get started' : 'Completed medications will appear here',
+            isActiveTab
+                ? 'Add your first medication to get started'
+                : 'Completed medications will appear here',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurface.withOpacity(0.4),
             ),
@@ -240,7 +263,9 @@ class MedicationCard extends StatelessWidget {
             width: double.infinity,
             decoration: BoxDecoration(
               color: theme.colorScheme.secondary,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16.0)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(16.0),
+              ),
             ),
           ),
           Padding(
@@ -270,7 +295,7 @@ class MedicationCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                
+
                 const SizedBox(width: 16.0),
 
                 // Medication name
@@ -299,8 +324,11 @@ class MedicationActions extends StatelessWidget {
   final Med medication;
   final MedicationListViewModel viewModel;
 
-  const MedicationActions(
-      {super.key, required this.medication, required this.viewModel});
+  const MedicationActions({
+    super.key,
+    required this.medication,
+    required this.viewModel,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -322,8 +350,8 @@ class MedicationActions extends StatelessWidget {
           ),
           child: Text(
             'Details',
-            style: theme.textTheme.labelMedium
-                // ?.copyWith(color: theme.colorScheme.onSurface),
+            style: theme.textTheme.labelMedium,
+            // ?.copyWith(color: theme.colorScheme.onSurface),
           ),
         ),
         const SizedBox(width: AppTheme.spacingS),
@@ -342,7 +370,11 @@ class MedicationActions extends StatelessWidget {
           ),
           child: Text(
             'Edit',
-            style: TextStyle(color: Colors.blueGrey[50], fontSize: 14, fontWeight: FontWeight.w500),
+            style: TextStyle(
+              color: Colors.blueGrey[50],
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ),
       ],
@@ -353,7 +385,7 @@ class MedicationActions extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => MedicationDetailView(medicineId: medication.id!),
+        builder: (_) => MedicationDetailView(medicineId: medication.id),
       ),
     );
   }

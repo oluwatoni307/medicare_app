@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
-// --- Update imports to use new models and ViewModel ---
-import 'medicine_model.dart'; // New model
-import 'medicine_view_model.dart'; // Updated VM
+import 'medicine_model.dart';
+import 'medicine_view_model.dart'; // FIXED: correct filename
 import 'package:provider/provider.dart';
 import 'package:table_calendar/table_calendar.dart';
-import '/theme.dart'; // Assuming AppTheme is defined
-// --- Import Hive models for type access in UI ---
+import '/theme.dart';
 
 class MedicationDetailView extends StatelessWidget {
   final String medicineId;
@@ -14,9 +12,7 @@ class MedicationDetailView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      // --- Updated ViewModel instantiation ---
       create: (_) => MedicationDetailViewModel()..loadMedicine(medicineId),
-      // --- End update ---
       child: Scaffold(
         extendBodyBehindAppBar: true,
         appBar: AppBar(
@@ -37,33 +33,30 @@ class _Body extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // --- Updated ViewModel type ---
     final vm = context.watch<MedicationDetailViewModel>();
-    // --- End update ---
+
     if (vm.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
+
     if (vm.error != null) {
       return _ErrorState(
         error: vm.error!,
-        // --- Updated to use medicineId from the ViewModel's medicationDetail ---
-        onRetry: () => vm.loadMedicine(vm.medicationDetail?.medication.id ?? ''),
-        // --- End update ---
+        onRetry: () =>
+            vm.loadMedicine(vm.medicationDetail?.medication.id ?? ''),
       );
     }
-    // --- Updated null check for new model ---
+
     if (vm.medicationDetail == null) {
       return const Center(child: Text('No medicine data found'));
     }
-    // --- End update ---
+
     return Scrollbar(
       child: CustomScrollView(
         slivers: [
           /* ----------------------------- Header ----------------------------- */
           SliverToBoxAdapter(
-            // --- Updated to pass the new model ---
             child: _MedicineHeader(medicationDetail: vm.medicationDetail!),
-            // --- End update ---
           ),
           /* ----------------------------- Calendar --------------------------- */
           SliverToBoxAdapter(
@@ -87,9 +80,7 @@ class _Body extends StatelessWidget {
             ),
           ),
           /* -------------------------- Schedule / Metrics -------------------- */
-          // --- Updated conditional based on new ViewModel property ---
           if (!vm.showMetrics) _ScheduleSliver(vm) else _MetricsSliver(vm),
-          // --- End update ---
           const SliverToBoxAdapter(child: SizedBox(height: AppTheme.spacingL)),
         ],
       ),
@@ -101,17 +92,14 @@ class _Body extends StatelessWidget {
 /*                               UI SECTIONS                                  */
 /* -------------------------------------------------------------------------- */
 class _MedicineHeader extends StatelessWidget {
-  // --- Updated to use the new MedicationDetail model ---
   final MedicationDetail medicationDetail;
   const _MedicineHeader({required this.medicationDetail});
-  // --- End update ---
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    // --- Updated to access properties from Hive Med object ---
     final med = medicationDetail.medication;
-    // --- End update ---
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(
@@ -129,31 +117,38 @@ class _MedicineHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(med.name, style: textTheme.displaySmall), // Use med.name
+          Text(med.name, style: textTheme.displaySmall),
           const SizedBox(height: AppTheme.spacingS),
           Row(
             children: [
-              Text('Dosage: ${med.dosage}', // Use med.dosage
-                  style: textTheme.bodyMedium?.copyWith(color: AppTheme.lightText)),
+              Text(
+                'Dosage: ${med.dosage}',
+                style: textTheme.bodyMedium?.copyWith(
+                  color: AppTheme.lightText,
+                ),
+              ),
               const SizedBox(width: AppTheme.spacingM),
-              Text('Type: ${med.type}', // Use med.type
-                  style: textTheme.bodyMedium?.copyWith(color: AppTheme.lightText)),
+              Text(
+                'Type: ${med.type}',
+                style: textTheme.bodyMedium?.copyWith(
+                  color: AppTheme.lightText,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: AppTheme.spacingXS),
-          // --- Updated to reflect Hive Med structure ---
-          // Example: Show start/end dates or number of scheduled times
           Text(
             'Starts: ${_formatDate(med.startAt)}' +
-                (med.endAt != null ? ', Ends: ${_formatDate(med.endAt!)}' : ', Indefinite'),
+                (med.endAt != null
+                    ? ', Ends: ${_formatDate(med.endAt!)}'
+                    : ', Indefinite'),
             style: textTheme.bodySmall?.copyWith(color: AppTheme.lightText),
           ),
           const SizedBox(height: AppTheme.spacingXS),
           Text(
-            'Doses per day: ${med.scheduleTimes.length}', // Show number of daily doses
+            'Doses per day: ${med.scheduleTimes.length}',
             style: textTheme.bodySmall?.copyWith(color: AppTheme.lightText),
           ),
-          // --- End update ---
         ],
       ),
     );
@@ -161,13 +156,26 @@ class _MedicineHeader extends StatelessWidget {
 }
 
 class _Calendar extends StatelessWidget {
-  // --- Updated ViewModel type ---
   final MedicationDetailViewModel vm;
   const _Calendar(this.vm);
-  // --- End update ---
 
   @override
   Widget build(BuildContext context) {
+    // CRITICAL FIX: Get date ranges from ViewModel
+    final firstDay = vm.getStartDate();
+    final lastDay = vm.getEndDate();
+    final focusedDay = vm.getFocusedDay(); // This is the KEY fix!
+
+    // Debug assertion to catch issues early
+    assert(
+      isSameDay(focusedDay, lastDay) || focusedDay.isBefore(lastDay),
+      'Focused day ($focusedDay) must be before or equal to last day ($lastDay)',
+    );
+    assert(
+      isSameDay(focusedDay, firstDay) || focusedDay.isAfter(firstDay),
+      'Focused day ($focusedDay) must be after or equal to first day ($firstDay)',
+    );
+
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -176,11 +184,12 @@ class _Calendar extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(AppTheme.spacingS),
         child: TableCalendar<String>(
-          firstDay: vm.getStartDate().subtract(const Duration(days: 30)),
-          lastDay: vm.getEndDate().add(const Duration(days: 30)),
-          focusedDay: DateTime.now(),
-                    daysOfWeekHeight: 45.0,  // Increase from default ~25 to 45
-
+          // CRITICAL: Use ViewModel methods for date constraints
+          firstDay: firstDay,
+          lastDay: lastDay,
+          focusedDay:
+              focusedDay, // FIXED: No longer using DateTime.now() directly
+          daysOfWeekHeight: 45.0,
           calendarFormat: CalendarFormat.month,
           startingDayOfWeek: StartingDayOfWeek.monday,
           headerStyle: const HeaderStyle(
@@ -200,7 +209,12 @@ class _Calendar extends StatelessWidget {
             ),
           ),
           selectedDayPredicate: (day) => vm.selectedDate == _formatDate(day),
-          onDaySelected: (selected, _) => vm.selectDate(_formatDate(selected)),
+          onDaySelected: (selected, _) {
+            // Only allow selection of dates within range
+            if (vm.isDateInRange(selected)) {
+              vm.selectDate(_formatDate(selected));
+            }
+          },
           calendarBuilders: CalendarBuilders(
             defaultBuilder: (context, day, _) =>
                 _CalendarDay(day, vm, isSelected: false, isToday: false),
@@ -217,19 +231,23 @@ class _Calendar extends StatelessWidget {
 
 class _CalendarDay extends StatelessWidget {
   final DateTime day;
-  // --- Updated ViewModel type ---
   final MedicationDetailViewModel vm;
-  // --- End update ---
   final bool isSelected;
   final bool isToday;
-  const _CalendarDay(this.day, this.vm,
-      {required this.isSelected, required this.isToday});
+
+  const _CalendarDay(
+    this.day,
+    this.vm, {
+    required this.isSelected,
+    required this.isToday,
+  });
 
   @override
   Widget build(BuildContext context) {
     final dateStr = _formatDate(day);
     final inRange = vm.isDateInRange(day);
     final color = vm.getDayColor(dateStr);
+
     return Container(
       margin: const EdgeInsets.all(2),
       decoration: BoxDecoration(
@@ -237,10 +255,10 @@ class _CalendarDay extends StatelessWidget {
         color: isSelected
             ? AppTheme.primaryAction
             : isToday
-                ? AppTheme.primaryAction.withOpacity(0.5)
-                : inRange
-                    ? color.withOpacity(0.7)
-                    : null,
+            ? AppTheme.primaryAction.withOpacity(0.5)
+            : inRange
+            ? color.withOpacity(0.7)
+            : null,
         border: inRange && !isSelected && !isToday
             ? Border.all(color: AppTheme.primaryAction, width: 1)
             : null,
@@ -263,8 +281,12 @@ class _ToggleButton extends StatelessWidget {
   final String label;
   final IconData icon;
   final VoidCallback onPressed;
-  const _ToggleButton(
-      {required this.label, required this.icon, required this.onPressed});
+
+  const _ToggleButton({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -285,34 +307,32 @@ class _ToggleButton extends StatelessWidget {
 
 /* ------------------------------- Schedule --------------------------------- */
 class _ScheduleSliver extends StatelessWidget {
-  // --- Updated ViewModel type ---
   final MedicationDetailViewModel vm;
   const _ScheduleSliver(this.vm);
-  // --- End update ---
 
   @override
   Widget build(BuildContext context) {
-    // --- Updated to use the new date format and schedule retrieval logic ---
     final date = vm.selectedDate ?? _formatDate(DateTime.now());
-    final schedules = vm.getDaySchedules(date); // Returns List<Map<String, dynamic>>
-    // --- End update ---
+    final schedules = vm.getDaySchedules(date);
+
     if (schedules.isEmpty) {
       return const SliverFillRemaining(
         child: Center(
-          child: Text('No scheduled doses for this day',
-              style: TextStyle(color: AppTheme.lightText)),
+          child: Text(
+            'No scheduled doses for this day',
+            style: TextStyle(color: AppTheme.lightText),
+          ),
         ),
       );
     }
+
     return SliverPadding(
       padding: const EdgeInsets.all(AppTheme.spacingM),
       sliver: SliverList(
         delegate: SliverChildBuilderDelegate(
           (context, index) => Padding(
             padding: const EdgeInsets.only(bottom: AppTheme.spacingS),
-            // --- Updated to pass the new schedule data structure ---
-            child: _ScheduleCard(schedules[index]), // Pass Map<String, dynamic>
-            // --- End update ---
+            child: _ScheduleCard(schedules[index]),
           ),
           childCount: schedules.length,
         ),
@@ -322,24 +342,22 @@ class _ScheduleSliver extends StatelessWidget {
 }
 
 class _ScheduleCard extends StatelessWidget {
-  // --- Updated to accept the new data structure ---
-  // Expecting Map<String, dynamic> with 'time': TimeOfDay, 'status': String
   final Map<String, dynamic> schedule;
   const _ScheduleCard(this.schedule);
-  // --- End update ---
 
   @override
   Widget build(BuildContext context) {
-    // --- Updated to access data from the new structure ---
     final status = schedule['status'] as String;
     final timeOfDay = schedule['time'] as TimeOfDay;
-    final timeString = '${timeOfDay.hour.toString().padLeft(2, '0')}:${timeOfDay.minute.toString().padLeft(2, '0')}';
-    // --- End update ---
+    final timeString =
+        '${timeOfDay.hour.toString().padLeft(2, '0')}:${timeOfDay.minute.toString().padLeft(2, '0')}';
+
     final (color, icon, label) = switch (status) {
       'taken' => (Colors.green, Icons.check_circle, 'Taken'),
       'missed' => (Colors.red, Icons.cancel, 'Missed'),
       _ => (Colors.orange, Icons.schedule, 'Pending'),
     };
+
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -347,13 +365,13 @@ class _ScheduleCard extends StatelessWidget {
       ),
       child: ListTile(
         leading: Icon(icon, color: color),
-        title: Text(timeString, // Use formatted time string
-            style: Theme.of(context).textTheme.titleMedium),
-        subtitle: Text(label,
-            style: Theme.of(context).textTheme.bodySmall),
+        title: Text(timeString, style: Theme.of(context).textTheme.titleMedium),
+        subtitle: Text(label, style: Theme.of(context).textTheme.bodySmall),
         trailing: Chip(
-          label: Text(label,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          label: Text(
+            label,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
           backgroundColor: color.withOpacity(0.15),
           side: BorderSide(color: color),
         ),
@@ -364,10 +382,8 @@ class _ScheduleCard extends StatelessWidget {
 
 /* -------------------------------- Metrics --------------------------------- */
 class _MetricsSliver extends StatelessWidget {
-  // --- Updated ViewModel type ---
   final MedicationDetailViewModel vm;
   const _MetricsSliver(this.vm);
-  // --- End update ---
 
   @override
   Widget build(BuildContext context) {
@@ -398,7 +414,7 @@ class _MetricsSliver extends StatelessWidget {
             Colors.green,
           ),
           _MetricCard(
-            'Doses Missed (Approx)',
+            'Doses Missed',
             vm.getMissedDosesCount().toString(),
             Icons.cancel,
             Colors.red,
@@ -413,6 +429,7 @@ class _MetricCard extends StatelessWidget {
   final String title, value;
   final IconData icon;
   final Color color;
+
   const _MetricCard(this.title, this.value, this.icon, this.color);
 
   @override
@@ -429,15 +446,18 @@ class _MetricCard extends StatelessWidget {
           children: [
             Icon(icon, size: 32, color: color),
             const SizedBox(height: AppTheme.spacingS),
-            Text(value,
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineSmall
-                    ?.copyWith(color: color)),
+            Text(
+              value,
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(color: color),
+            ),
             const SizedBox(height: 4),
-            Text(title,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           ],
         ),
       ),
@@ -451,6 +471,7 @@ class _MetricCard extends StatelessWidget {
 class _ErrorState extends StatelessWidget {
   final String error;
   final VoidCallback onRetry;
+
   const _ErrorState({required this.error, required this.onRetry});
 
   @override
@@ -461,17 +482,24 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline,
-                size: 64, color: Theme.of(context).colorScheme.error),
+            Icon(
+              Icons.error_outline,
+              size: 64,
+              color: Theme.of(context).colorScheme.error,
+            ),
             const SizedBox(height: AppTheme.spacingM),
-            Text('Error loading medicine details',
-                style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'Error loading medicine details',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: AppTheme.spacingS),
-            Text(error,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppTheme.lightText,
-                    ),
-                textAlign: TextAlign.center),
+            Text(
+              error,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: AppTheme.lightText),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: AppTheme.spacingL),
             ElevatedButton.icon(
               onPressed: onRetry,
@@ -488,7 +516,9 @@ class _ErrorState extends StatelessWidget {
 /* -------------------------------------------------------------------------- */
 /*                            FORMAT HELPERS                                */
 /* -------------------------------------------------------------------------- */
-// --- This helper was already present and is still relevant ---
 String _formatDate(DateTime date) =>
     '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-// --- End helper ---
+
+bool isSameDay(DateTime a, DateTime b) {
+  return a.year == b.year && a.month == b.month && a.day == b.day;
+}

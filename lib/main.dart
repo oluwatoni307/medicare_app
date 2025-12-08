@@ -3,6 +3,7 @@ import 'package:medicare_app/data/hive_init.dart';
 import 'package:medicare_app/features/auth/service.dart';
 import 'package:medicare_app/features/auth/auth_viewmodel.dart';
 import 'package:medicare_app/features/notifications/service.dart';
+import 'package:medicare_app/features/notifications/medication_notification_handler.dart';
 import 'package:provider/provider.dart';
 import './theme.dart';
 import 'routes.dart' show AppRoutes;
@@ -18,6 +19,17 @@ import 'package:medicare_app/firebase_options.dart';
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   debugPrint("📩 Background message received: ${message.messageId}");
+
+  // Handle medication reminder notifications in background
+  if (message.data['notification_type'] == 'medication_reminder') {
+    await MedicationNotificationHandler.instance.showNotificationWithActions(
+      title: message.notification?.title ?? 'Medication Reminder',
+      body: message.notification?.body ?? 'Time to take your medication',
+      medicineId: message.data['medicine_id'],
+      scheduleId: message.data['schedule_id'],
+      reminderTime: message.data['reminder_time'],
+    );
+  }
 }
 
 String anonKey =
@@ -53,13 +65,11 @@ Future<void> main() async {
     await NotificationService.instance.init();
     debugPrint("✅ NotificationService initialized");
 
+    // Initialize Medication Notification Handler (handles action buttons)
+    await MedicationNotificationHandler.instance.init();
+    debugPrint("✅ MedicationNotificationHandler initialized");
+
     // (Optional) background/periodic worker registration
-    try {
-      // await registerDailyWorker();
-      debugPrint("⚙️ Daily worker registered");
-    } catch (e) {
-      debugPrint("⚠️ Daily worker registration failed: $e");
-    }
 
     debugPrint("🚀 App initialized successfully");
   } catch (e) {

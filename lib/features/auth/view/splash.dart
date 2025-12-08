@@ -14,23 +14,27 @@ class _SplashScreenState extends State<SplashScreen> {
     _checkAppState();
   }
 
-  Future<void> 
-  _checkAppState() async {
+  Future<void> _checkAppState() async {
     await Future.delayed(Duration(seconds: 2)); // Show splash
-    
+
     // Check if user is already logged in
     final authService = AuthService();
-    final currentUser = authService.getCurrentUser();
-    
+    final currentUser = await authService.getCurrentUser(); // Added await
+
     if (currentUser != null) {
       // User is logged in - go to home
-      Navigator.pushReplacementNamed(context, '/');
+      if (mounted) {
+        // Check if widget is still mounted
+        Navigator.pushReplacementNamed(context, '/');
+      }
       return;
     }
-    
+
     // Check if first time user
     final hasSeenOnboarding = await AppStateManager.hasSeenOnboarding();
-    
+
+    if (!mounted) return; // Check before navigation
+
     if (hasSeenOnboarding) {
       // Returning user, no auth - go to login
       Navigator.pushReplacementNamed(context, '/auth');
@@ -50,7 +54,10 @@ class _SplashScreenState extends State<SplashScreen> {
             // Your app logo/icon
             Icon(Icons.medical_services, size: 80, color: Colors.blue),
             SizedBox(height: 20),
-            Text('MedStracker', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            Text(
+              'MedStracker',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
             SizedBox(height: 20),
             CircularProgressIndicator(),
           ],

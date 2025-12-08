@@ -5,13 +5,20 @@ part 'med.g.dart';
 
 @HiveType(typeId: 0)
 class Med {
-  @HiveField(0) final String id;
-  @HiveField(1) final String name;
-  @HiveField(2) final String dosage;
-  @HiveField(3) final String type;
-  @HiveField(4) final List<TimeOfDay> scheduleTimes; // Changed to TimeOfDay
-  @HiveField(5) final DateTime startAt;
-  @HiveField(6) final DateTime? endAt;
+  @HiveField(0)
+  final String id;
+  @HiveField(1)
+  final String name;
+  @HiveField(2)
+  final String dosage;
+  @HiveField(3)
+  final String type;
+  @HiveField(4)
+  final List<TimeOfDay> scheduleTimes; // Changed to TimeOfDay
+  @HiveField(5)
+  final DateTime startAt;
+  @HiveField(6)
+  final DateTime? endAt;
 
   Med({
     required this.id,
@@ -22,9 +29,8 @@ class Med {
     required this.startAt,
     this.endAt,
   });
-  
+
   String get imageUrl {
-    if (type == null) return 'images/types/default.png';
     return 'images/types/$type.png';
   }
 }

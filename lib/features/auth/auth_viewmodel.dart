@@ -6,7 +6,7 @@ import 'auth_model.dart';
 class AuthViewModel extends ChangeNotifier {
   final AuthService _authService;
   AuthViewModel(this._authService);
- 
+
   bool _isLoading = false;
   String _errorMessage = '';
   String _successMessage = '';
@@ -25,10 +25,14 @@ class AuthViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> signUp(String email, String password, {String name = 'User'}) async {
+  Future<void> signUp(
+    String email,
+    String password, {
+    String name = 'User',
+  }) async {
     _setLoading(true);
     _clearMessages();
-    
+
     try {
       _user = await _authService.signUp(email, password, name: name);
       // No need to restore on signup - new user has no data
@@ -42,13 +46,13 @@ class AuthViewModel extends ChangeNotifier {
   Future<void> signIn(String email, String password) async {
     _setLoading(true);
     _clearMessages();
-    
+
     try {
       _user = await _authService.signIn(email, password);
-     
+
       // Try to restore user's data after successful sign in
       await restoreFromSingleJson();
-     
+
       _setLoading(false);
     } catch (e) {
       _setError(e.toString().replaceFirst('Exception: ', ''));
@@ -59,14 +63,14 @@ class AuthViewModel extends ChangeNotifier {
   Future<void> signOut(BuildContext context) async {
     _setLoading(true);
     _clearMessages();
-    
+
     try {
       // Backup data before signing out
       await backupAllToSingleJson();
-     
+
       await _authService.signOut();
       _user = null;
-     
+
       // Navigate to login page
       if (context.mounted) {
         Navigator.of(context).pushNamedAndRemoveUntil(
@@ -74,7 +78,7 @@ class AuthViewModel extends ChangeNotifier {
           (route) => false,
         );
       }
-     
+
       _setLoading(false);
     } catch (e) {
       _setError(e.toString().replaceFirst('Exception: ', ''));
@@ -96,10 +100,12 @@ class AuthViewModel extends ChangeNotifier {
 
     _setLoading(true);
     _clearMessages();
-    
+
     try {
       await _authService.sendPasswordResetEmail(email.trim().toLowerCase());
-      _setSuccess('Password reset email sent to $email. Please check your inbox and follow the instructions to reset your password.');
+      _setSuccess(
+        'Password reset email sent to $email. Please check your inbox and follow the instructions to reset your password.',
+      );
       _setLoading(false);
       return true;
     } catch (e) {
@@ -109,8 +115,8 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
-  void checkCurrentUser() {
-    _user = _authService.getCurrentUser();
+  Future<void> checkCurrentUser() async {
+    _user = await _authService.getCurrentUser();
     notifyListeners();
   }
 
@@ -146,14 +152,14 @@ class AuthViewModel extends ChangeNotifier {
 // Test class for ViewModel
 class AuthViewModelTest {
   late AuthViewModel _viewModel;
-  
+
   AuthViewModelTest(AuthService authService) {
     _viewModel = AuthViewModel(authService);
   }
-  
+
   Future<void> runTests() async {
     print('🧪 Starting AuthViewModel Tests...\n');
-    
+
     try {
       // Test 1: Initial state
       print('Test 1: Initial state');
@@ -161,30 +167,29 @@ class AuthViewModelTest {
       print('Error: ${_viewModel.errorMessage}');
       print('Success: ${_viewModel.successMessage}');
       print('User: ${_viewModel.user?.email ?? 'null'}\n');
-      
+
       // Test 2: Email validation
       print('Test 2: Email validation tests');
-      
+
       // Test empty email
       var result = await _viewModel.sendPasswordResetEmail('');
       print('Empty email result: $result');
       print('Error message: ${_viewModel.errorMessage}\n');
-      
+
       // Test invalid email
       _viewModel.clearMessages();
       result = await _viewModel.sendPasswordResetEmail('invalid-email');
       print('Invalid email result: $result');
       print('Error message: ${_viewModel.errorMessage}\n');
-      
+
       // Test valid email
       _viewModel.clearMessages();
       result = await _viewModel.sendPasswordResetEmail('test@example.com');
       print('Valid email result: $result');
       print('Success message: ${_viewModel.successMessage}');
       print('Error message: ${_viewModel.errorMessage}\n');
-      
+
       print('✅ AuthViewModel tests completed');
-      
     } catch (e) {
       print('❌ ViewModel test error: $e');
     }

@@ -7,6 +7,7 @@ import '/routes.dart';
 import '/features/log/log_view.dart';
 import '/theme.dart';
 import 'Home_model.dart';
+import '/features/auth/auth_viewmodel.dart'; // Add this import
 
 class Homepage extends StatefulWidget {
   const Homepage({super.key});
@@ -15,21 +16,50 @@ class Homepage extends StatefulWidget {
   State<Homepage> createState() => _HomepageState();
 }
 
-class _HomepageState extends State<Homepage> {
+class _HomepageState extends State<Homepage> with RouteAware {
+  // Create viewModel at state level so it persists
+  late final HomeViewModel _viewModel;
+
+  @override
+  void initState() {
+    super.initState();
+    _viewModel = HomeViewModel();
+    // Initial load
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _viewModel.loadCurrentUserMedications();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+  }
+
+  @override
+  void didPopNext() {
+    // Refresh data when coming back from another page
+    print('[Homepage] Returned from another page - refreshing data');
+    _viewModel.loadCurrentUserMedications();
+  }
+
+  @override
+  void dispose() {
+    _viewModel.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<HomeViewModel>(
-      create: (context) {
-        final viewModel = HomeViewModel();
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          viewModel.loadCurrentUserMedications();
-        });
-        return viewModel;
-      },
+    return ChangeNotifierProvider<HomeViewModel>.value(
+      value: _viewModel,
       child: Scaffold(
         bottomNavigationBar: const BottomNavBar(),
         floatingActionButton: FloatingActionButton(
-          onPressed: () => Navigator.pushNamed(context, AppRoutes.new_medicine),
+          onPressed: () async {
+            // Wait for navigation to complete, then refresh
+            await Navigator.pushNamed(context, AppRoutes.new_medicine);
+            _viewModel.refresh();
+          },
           child: const Icon(Icons.add),
         ),
         body: Consumer<HomeViewModel>(
@@ -53,53 +83,74 @@ class _HomepageState extends State<Homepage> {
               );
             }
 
-            return CustomScrollView(
-              slivers: [
-                // Hero Section
-                SliverToBoxAdapter(
-                  child: Column(
-                    children: [
-                      SizedBox(height: 10),
-                      HeroSection(),
-                      storyText(),
-                      SizedBox(height: 20),
-                    ],
-                  ),
-                ),
-
-                // Today's Summary Card (conditional)
-                if (viewModel.showSummary)
+            return RefreshIndicator(
+              onRefresh: viewModel.refresh,
+              child: CustomScrollView(
+                slivers: [
+                  // Hero Section
                   SliverToBoxAdapter(
-                    child: TodaysSummaryCard(summary: viewModel.todaysSummary!),
+                    child: Column(
+                      children: [
+                        SizedBox(height: 10),
+                        HeroSection(),
+                        storyText(),
+                        SizedBox(height: 20),
+                      ],
+                    ),
                   ),
 
-                // Medications Grid
-                Consumer<HomeViewModel>(
-                  builder: (_, viewModel, __) {
-                    if (viewModel.medications.isEmpty) {
-                      return SliverToBoxAdapter(
-                        child: _buildEmptyState(context, viewModel),
-                      );
-                    }
-
-                    return SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      sliver: SliverGrid.count(
-                        crossAxisCount: 3,
-                        crossAxisSpacing: 6,
-                        mainAxisSpacing: 6,
-                        childAspectRatio: 0.95,
-                        children: viewModel.medications.map((med) {
-                          return MedicationBox(medication: med);
-                        }).toList(),
+                  // Today's Summary Card (conditional)
+                  if (viewModel.showSummary)
+                    SliverToBoxAdapter(
+                      child: TodaysSummaryCard(
+                        summary: viewModel.todaysSummary!,
                       ),
-                    );
-                  },
-                ),
+                    ),
 
-                // Bottom Padding
-                SliverToBoxAdapter(child: SizedBox(height: 80)),
-              ],
+                  // Medications Grid
+                  Consumer<HomeViewModel>(
+                    builder: (_, viewModel, __) {
+                      if (viewModel.medications.isEmpty) {
+                        return SliverToBoxAdapter(
+                          child: _buildEmptyState(context, viewModel),
+                        );
+                      }
+
+                      return SliverPadding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        sliver: SliverGrid.count(
+                          crossAxisCount: 3,
+                          crossAxisSpacing: 6,
+                          mainAxisSpacing: 6,
+                          childAspectRatio: 0.95,
+                          children: viewModel.medications.map((med) {
+                            return MedicationBox(
+                              medication: med,
+                              onTap: () async {
+                                // Wait for navigation and refresh when back
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => LogView(medicineId: med.id),
+                                  ),
+                                );
+                                // Refresh data after returning from log page
+                                print(
+                                  '[Homepage] Returned from LogView - refreshing',
+                                );
+                                viewModel.refresh();
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      );
+                    },
+                  ),
+
+                  // Bottom Padding
+                  SliverToBoxAdapter(child: SizedBox(height: 80)),
+                ],
+              ),
             );
           },
         ),
@@ -112,110 +163,120 @@ class _HomepageState extends State<Homepage> {
     final hasSummary = viewModel.todaysSummary != null;
     final noDosesToday = hasSummary && viewModel.todaysSummary!.totalDoses == 0;
 
-    if (noDosesToday) {
-      // Has medications but no doses scheduled today
-      return Container(
-        height: 300,
-        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 20),
-        child: Card(
-          elevation: 1,
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppTheme.accent.withOpacity(0.1),
-                    shape: BoxShape.circle,
+    return Consumer<AuthViewModel>(
+      builder: (context, authViewModel, _) {
+        final userName = authViewModel.user?.name ?? 'there';
+
+        if (noDosesToday) {
+          // Has medications but no doses scheduled today
+          return Container(
+            height: 300,
+            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 20),
+            child: Card(
+              elevation: 1,
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppTheme.accent.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.event_available,
+                        size: 48,
+                        color: AppTheme.accent,
+                      ),
+                    ),
+                    SizedBox(height: 20),
+                    Text(
+                      'All set for today, $userName!',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'No doses scheduled for today.\nEnjoy your day!',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppTheme.lightText,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        // No medications at all
+        return Container(
+          height: 300,
+          margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 20),
+          child: Card(
+            elevation: 1,
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceMuted,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.outline.withOpacity(0.2),
+                        width: 1,
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.medication_liquid,
+                      size: 48,
+                      color: AppTheme.lightText,
+                    ),
                   ),
-                  child: Icon(
-                    Icons.event_available,
-                    size: 48,
-                    color: AppTheme.accent,
+                  SizedBox(height: 20),
+                  Text(
+                    'Welcome, $userName!',
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
-                ),
-                SizedBox(height: 20),
-                Text(
-                  'All set for today',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'No doses scheduled for today.\nEnjoy your day!',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(color: AppTheme.lightText),
-                ),
-              ],
+                  SizedBox(height: 8),
+                  Text(
+                    'Start tracking your medications to\nnever miss a dose again',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(color: AppTheme.lightText),
+                  ),
+                  SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: () =>
+                        Navigator.pushNamed(context, '/new_medicine'),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text(
+                      'Add Your First Medication',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      );
-    }
-
-    // No medications at all
-    return Container(
-      height: 300,
-      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 20),
-      child: Card(
-        elevation: 1,
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceMuted,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.outline.withOpacity(0.2),
-                    width: 1,
-                  ),
-                ),
-                child: Icon(
-                  Icons.medication_liquid,
-                  size: 48,
-                  color: AppTheme.lightText,
-                ),
-              ),
-              SizedBox(height: 20),
-              Text(
-                'No medications yet',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              SizedBox(height: 8),
-              Text(
-                'Start tracking your medications to\nnever miss a dose again',
-                textAlign: TextAlign.center,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(color: AppTheme.lightText),
-              ),
-              SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: () => Navigator.pushNamed(context, '/new_medicine'),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text(
-                  'Add Your First Medication',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
 
-// Hero Section
+// Hero Section with personalized greeting
 class HeroSection extends StatelessWidget {
   const HeroSection({super.key});
 
@@ -227,6 +288,25 @@ class HeroSection extends StatelessWidget {
       child: Stack(
         children: [
           const Clockwidget(),
+
+          // Personalized greeting at the top
+          Positioned(
+            top: 10,
+            left: 10,
+            child: Consumer<AuthViewModel>(
+              builder: (context, authViewModel, _) {
+                final userName = authViewModel.user?.name ?? 'there';
+                return Text(
+                  'Hello, $userName! 👋',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                );
+              },
+            ),
+          ),
+
           Positioned(
             right: 10,
             bottom: 10,
@@ -253,26 +333,40 @@ class HeroSection extends StatelessWidget {
   }
 }
 
-// Story Text
+// Story Text with personalization
 Widget storyText() {
-  return Padding(
-    padding: EdgeInsets.all(10.0),
-    child: RichText(
-      text: TextSpan(
-        style: TextStyle(fontSize: 17, color: Colors.black),
-        children: [
-          TextSpan(
-            text:
-                "Don't wait! Every reminder brings you closer to a healthier, stress-free life. ",
+  return Consumer<AuthViewModel>(
+    builder: (context, authViewModel, _) {
+      final userName = authViewModel.user?.name ?? 'friend';
+      return Padding(
+        padding: EdgeInsets.all(10.0),
+        child: RichText(
+          text: TextSpan(
+            style: TextStyle(fontSize: 17, color: Colors.black),
+            children: [
+              TextSpan(
+                text: "Hey $userName! ",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              TextSpan(
+                text:
+                    "Don't wait! Every reminder brings you closer to a healthier, stress-free life. ",
+              ),
+              TextSpan(
+                text: "Tap the + button",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black,
+                ),
+              ),
+              TextSpan(
+                text: " to start managing your medications effortlessly.",
+              ),
+            ],
           ),
-          TextSpan(
-            text: "Tap the + button",
-            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
-          ),
-          TextSpan(text: " to start managing your medications effortlessly."),
-        ],
-      ),
-    ),
+        ),
+      );
+    },
   );
 }
 
@@ -364,25 +458,19 @@ class TodaysSummaryCard extends StatelessWidget {
   }
 }
 
-// Medication Box with Status Badge
+// Updated MedicationBox with callback
 class MedicationBox extends StatelessWidget {
   final MedicationInfo medication;
+  final VoidCallback? onTap;
 
-  const MedicationBox({super.key, required this.medication});
+  const MedicationBox({super.key, required this.medication, this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return Opacity(
       opacity: medication.cardOpacity,
       child: GestureDetector(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => LogView(medicineId: medication.id),
-            ),
-          );
-        },
+        onTap: onTap,
         child: Card(
           elevation: 4,
           shape: RoundedRectangleBorder(

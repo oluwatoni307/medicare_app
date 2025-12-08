@@ -5,6 +5,7 @@ import 'analysis_model.dart';
 import 'package:flutter/material.dart';
 
 /// Service to fetch and aggregate medication adherence data for analysis views.
+/// FIXED: Now returns complete data ranges (all days in month, all 7 days in week)
 class AnalysisService {
   late Box<Med> _medsBox;
   late Box<LogModel> _logsBox;
@@ -180,7 +181,7 @@ class AnalysisService {
 
   /// Returns complete weekly analysis data including overall adherence,
   /// per-medication breakdown, and insights
-  /// TREATS 0.1% AS 0% FOR ADHERENCE (PAST DEADLINES ONLY)
+  /// FIXED: Now ALWAYS returns all 7 days (Mon-Sun) with 0% for missing days
   Future<WeeklyAnalysisData> getWeeklyDataComplete(
     String startDate,
     String endDate,
@@ -199,9 +200,25 @@ class AnalysisService {
 
       final medications = _medsBox.values.toList();
 
+      const dayKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+      // FIXED: Initialize all 7 days with 0.0
+      final overallAdherence = <String, double>{
+        'mon': 0.0,
+        'tue': 0.0,
+        'wed': 0.0,
+        'thu': 0.0,
+        'fri': 0.0,
+        'sat': 0.0,
+        'sun': 0.0,
+      };
+
+      final perMedicationData = <String, Map<String, double>>{};
+      final medicationNames = <String>[];
+
       if (medications.isEmpty) {
         return WeeklyAnalysisData(
-          overallAdherence: {},
+          overallAdherence: overallAdherence,
           medications: [],
           perMedicationData: {},
           insight: WeeklyInsight(
@@ -212,15 +229,20 @@ class AnalysisService {
         );
       }
 
-      const dayKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-      final overallAdherence = <String, double>{};
-      final perMedicationData = <String, Map<String, double>>{};
-      final medicationNames = <String>[];
-
       final today = DateTime.now();
+      final todayNormalized = DateTime(today.year, today.month, today.day);
 
       for (final med in medications) {
-        final tempMedData = <String, double>{};
+        // FIXED: Initialize all 7 days for each medication
+        final tempMedData = <String, double>{
+          'mon': 0.0,
+          'tue': 0.0,
+          'wed': 0.0,
+          'thu': 0.0,
+          'fri': 0.0,
+          'sat': 0.0,
+          'sun': 0.0,
+        };
 
         final relevantLogs = <LogModel>[];
         for (final log in _logsBox.values) {
@@ -235,25 +257,43 @@ class AnalysisService {
           for (final log in relevantLogs) _formatDate(log.date): log,
         };
 
+        bool hasAnyActiveDay = false;
+
         for (int i = 0; i < 7; i++) {
           final dayDate = startNormalized.add(Duration(days: i));
 
-          if (dayDate.isAfter(today)) break;
+          // Skip future days
+          if (dayDate.isAfter(todayNormalized)) continue;
 
           final dayKey = dayKeys[i];
           final dateKey = _formatDate(dayDate);
 
           if (!_isMedicationActiveOnDate(med, dayDate)) continue;
 
-          if (_isSameDay(dayDate, today) && !logMap.containsKey(dateKey)) {
-            continue;
+          hasAnyActiveDay = true;
+
+          // Check if today with no logs and no past deadlines
+          if (_isSameDay(dayDate, todayNormalized) &&
+              !logMap.containsKey(dateKey)) {
+            bool anyPastDeadline = false;
+            for (final schedTime in med.scheduleTimes) {
+              if (_isPastDeadline(schedTime, dayDate)) {
+                anyPastDeadline = true;
+                break;
+              }
+            }
+
+            if (!anyPastDeadline) {
+              // All doses still pending - skip this day
+              continue;
+            }
+            // else: has past deadlines, keep 0.0
           }
 
           double dayPercent = 0.0;
 
           if (logMap.containsKey(dateKey)) {
             final log = logMap[dateKey]!;
-            // TIME-AWARE: Treat 0.1% as 0% only if all schedules are past deadline
             if (log.percent == 0.1) {
               // Check if this is a past date or today with all deadlines passed
               bool allPast = true;
@@ -263,39 +303,31 @@ class AnalysisService {
                   break;
                 }
               }
-              dayPercent = allPast
-                  ? 0.0
-                  : 0.1; // Keep 0.1 if some doses still pending
+              dayPercent = allPast ? 0.0 : 0.1;
             } else {
               dayPercent = log.percent;
             }
           }
 
-          tempMedData[dayKey] = dayPercent;
+          // Only set if not 0.1 (pending)
+          if (dayPercent != 0.1) {
+            tempMedData[dayKey] = dayPercent;
+          }
         }
 
-        // Only add medication if it has at least one active day in the week
-        if (tempMedData.isNotEmpty) {
+        // Only add medication if it was active during the week
+        if (hasAnyActiveDay) {
           medicationNames.add(med.name);
           perMedicationData[med.name] = tempMedData;
         }
       }
 
+      // Calculate overall adherence for each day
       for (int i = 0; i < 7; i++) {
         final dayDate = startNormalized.add(Duration(days: i));
-        if (dayDate.isAfter(today)) break;
+        if (dayDate.isAfter(todayNormalized)) continue;
 
         final dayKey = dayKeys[i];
-
-        bool hasDayData = false;
-        for (final medName in medicationNames) {
-          if (perMedicationData[medName]!.containsKey(dayKey)) {
-            hasDayData = true;
-            break;
-          }
-        }
-
-        if (!hasDayData) continue;
 
         double totalPercent = 0.0;
         int medicationCount = 0;
@@ -319,8 +351,12 @@ class AnalysisService {
       double overallSum = 0.0;
       int dayCount = 0;
 
-      for (final percent in overallAdherence.values) {
-        overallSum += percent;
+      for (int i = 0; i < 7; i++) {
+        final dayDate = startNormalized.add(Duration(days: i));
+        if (dayDate.isAfter(todayNormalized)) continue;
+
+        final dayKey = dayKeys[i];
+        overallSum += overallAdherence[dayKey]!;
         dayCount++;
       }
 
@@ -359,7 +395,15 @@ class AnalysisService {
     } catch (e) {
       debugPrint('Error in AnalysisService.getWeeklyDataComplete: $e');
       return WeeklyAnalysisData(
-        overallAdherence: {},
+        overallAdherence: {
+          'mon': 0.0,
+          'tue': 0.0,
+          'wed': 0.0,
+          'thu': 0.0,
+          'fri': 0.0,
+          'sat': 0.0,
+          'sun': 0.0,
+        },
         medications: [],
         perMedicationData: {},
         insight: WeeklyInsight(
@@ -451,36 +495,65 @@ class AnalysisService {
       return DailySummary(
         date: entry.key,
         adherencePercentage: entry.value,
-        hasActivity: true,
+        hasActivity:
+            entry.value > 0 || entry.value == 0.0, // Has activity if logged
       );
     }).toList();
   }
 
+  /// FIXED: Returns ALL days in the month (up to today) with 0% for missing days
+  /// This ensures the chart always shows the complete month range
   Future<List<ChartDataPoint>> getMonthlyChartData(String month) async {
-    final monthData = await getMonthlyData(month);
+    await _ensureInitialized();
 
-    final result = monthData.entries.map((entry) {
-      return ChartDataPoint(date: entry.key, value: entry.value);
-    }).toList();
+    try {
+      final monthStart = DateTime.parse('$month-01');
+      final monthEnd = DateTime(monthStart.year, monthStart.month + 1, 0);
+      final today = DateTime.now();
+      final todayNormalized = DateTime(today.year, today.month, today.day);
 
-    result.sort((a, b) => a.date.compareTo(b.date));
-    return result;
+      final monthData = await getMonthlyData(month);
+      final result = <ChartDataPoint>[];
+
+      // Generate ALL days in the month (up to today)
+      for (int day = 1; day <= monthEnd.day; day++) {
+        final currentDate = DateTime(monthStart.year, monthStart.month, day);
+
+        // Stop at today for current/future months
+        if (currentDate.isAfter(todayNormalized)) break;
+
+        final dateStr = _formatDate(currentDate);
+        final value = monthData[dateStr] ?? 0.0;
+
+        result.add(ChartDataPoint(date: dateStr, value: value));
+      }
+
+      return result;
+    } catch (e) {
+      debugPrint('Error in AnalysisService.getMonthlyChartData: $e');
+      return [];
+    }
   }
 
   /// Returns month's daily aggregated adherence percentages
   /// TREATS 0.1% AS 0% FOR PAST DATES
+  /// Returns month's daily aggregated adherence percentages
+  /// NOW RETURNS ALL DAYS IN MONTH (up to today) - missing days default to 0%
   Future<Map<String, double>> getMonthlyData(String month) async {
     await _ensureInitialized();
 
     try {
       final monthStart = DateTime.parse('$month-01');
       final monthEnd = DateTime(monthStart.year, monthStart.month + 1, 0);
+      final today = DateTime.now();
+      final todayNormalized = DateTime(today.year, today.month, today.day);
 
       final result = <String, double>{};
       final medications = _medsBox.values.toList();
 
       if (medications.isEmpty) return result;
 
+      // Collect all logs for the month
       final relevantLogs = <LogModel>[];
       for (final log in _logsBox.values) {
         if (!log.date.isBefore(monthStart) && !log.date.isAfter(monthEnd)) {
@@ -488,6 +561,7 @@ class AnalysisService {
         }
       }
 
+      // Group logs by date
       final dailyLogs = <DateTime, List<LogModel>>{};
       for (final log in relevantLogs) {
         final logDate = DateTime(log.date.year, log.date.month, log.date.day);
@@ -495,45 +569,104 @@ class AnalysisService {
         dailyLogs[logDate]!.add(log);
       }
 
-      dailyLogs.forEach((date, logs) {
-        double totalPercent = 0.0;
-        int medicationCount = 0;
+      // Loop through ALL days in the month (up to today)
+      for (int day = 1; day <= monthEnd.day; day++) {
+        final currentDate = DateTime(monthStart.year, monthStart.month, day);
 
-        for (final log in logs) {
-          Med? med;
-          try {
-            med = medications.firstWhere((m) => m.id == log.medId);
-          } on StateError {
-            continue;
+        // Skip future dates
+        if (currentDate.isAfter(todayNormalized)) break;
+
+        final dateStr = _formatDate(currentDate);
+
+        // Check if any medication was active on this date
+        bool hasMedicationActive = false;
+        for (final med in medications) {
+          if (_isMedicationActiveOnDate(med, currentDate)) {
+            hasMedicationActive = true;
+            break;
           }
+        }
 
-          if (!_isMedicationActiveOnDate(med, date)) continue;
+        // Skip days with no active medications
+        if (!hasMedicationActive) continue;
 
-          double percent = log.percent;
-          // TIME-AWARE: Check if all schedules past deadline
-          if (percent == 0.1) {
-            bool allPast = true;
-            for (final schedTime in med.scheduleTimes) {
-              if (!_isPastDeadline(schedTime, date)) {
-                allPast = false;
-                break;
-              }
+        // Check if we have logs for this day
+        if (dailyLogs.containsKey(currentDate)) {
+          // Day with logs - calculate adherence
+          final logs = dailyLogs[currentDate]!;
+          double totalPercent = 0.0;
+          int medicationCount = 0;
+
+          for (final log in logs) {
+            Med? med;
+            try {
+              med = medications.firstWhere((m) => m.id == log.medId);
+            } on StateError {
+              continue;
             }
-            percent = allPast ? 0.0 : 0.1;
+
+            if (!_isMedicationActiveOnDate(med, currentDate)) continue;
+
+            double percent = log.percent;
+            // TIME-AWARE: Check if all schedules past deadline
+            if (percent == 0.1) {
+              bool allPast = true;
+              for (final schedTime in med.scheduleTimes) {
+                if (!_isPastDeadline(schedTime, currentDate)) {
+                  allPast = false;
+                  break;
+                }
+              }
+              percent = allPast ? 0.0 : 0.1;
+            }
+
+            // Only count if not 0.1 (still has pending doses)
+            if (percent != 0.1) {
+              totalPercent += percent;
+              medicationCount++;
+            }
           }
 
-          // Only count if not 0.1 (still has pending doses)
-          if (percent != 0.1) {
-            totalPercent += percent;
-            medicationCount++;
+          if (medicationCount > 0) {
+            result[dateStr] = totalPercent / medicationCount;
+          } else {
+            // Logs exist but all pending - check if today
+            if (_isSameDay(currentDate, todayNormalized)) {
+              // Today with pending doses - don't show 0
+              continue;
+            } else {
+              // Past day with only pending logs - should be 0
+              result[dateStr] = 0.0;
+            }
+          }
+        } else {
+          // No logs for this day
+          if (_isSameDay(currentDate, todayNormalized)) {
+            // Today with no logs - check if any schedules are past deadline
+            bool anyPastDeadline = false;
+            for (final med in medications) {
+              if (_isMedicationActiveOnDate(med, currentDate)) {
+                for (final schedTime in med.scheduleTimes) {
+                  if (_isPastDeadline(schedTime, currentDate)) {
+                    anyPastDeadline = true;
+                    break;
+                  }
+                }
+              }
+              if (anyPastDeadline) break;
+            }
+
+            if (anyPastDeadline) {
+              // Some doses are past deadline - count as missed
+              result[dateStr] = 0.0;
+            }
+            // else: all doses still pending, don't add to result
+          } else {
+            // Past day with no logs - definitively missed
+            result[dateStr] = 0.0;
           }
         }
-
-        if (medicationCount > 0) {
-          final dateStr = _formatDate(date);
-          result[dateStr] = totalPercent / medicationCount;
-        }
-      });
+      }
 
       return result;
     } catch (e) {

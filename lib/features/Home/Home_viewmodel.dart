@@ -6,7 +6,7 @@ import '../auth/service.dart';
 class HomeViewModel extends ChangeNotifier {
   final DBhelper _dbHelper = DBhelper();
   final AuthService _authService = AuthService();
-  
+
   HomepageData _homepageData = HomepageData.initial();
   bool _isLoading = false;
   String? _errorMessage;
@@ -29,7 +29,7 @@ class HomeViewModel extends ChangeNotifier {
       // Load homepage data (now includes todaysSummary)
       _homepageData = await _dbHelper.getHomepageData(userId);
       print('Loaded homepage data: $_homepageData');
-      
+
       if (_homepageData.todaysSummary != null) {
         print('Today\'s summary: ${_homepageData.todaysSummary}');
       }
@@ -37,14 +37,14 @@ class HomeViewModel extends ChangeNotifier {
       print('Error loading medicines: $e');
       _errorMessage = 'Failed to load medicines: $e';
     }
-    
+
     _isLoading = false;
     notifyListeners();
   }
 
   Future<void> loadCurrentUserMedications() async {
     print('Loading current user medications...');
-    final user = _authService.getCurrentUser();
+    final user = await _authService.getCurrentUser(); // Made async
     if (user != null) {
       print('Current user found: ${user.id}');
       await loadMedicines(user.id);

@@ -84,7 +84,9 @@ class MedicationInfo {
     } else if (takenDoses > 0) {
       return const Color(0xFFE2E8F0); // AppTheme.outlineVariant
     } else {
-      return const Color(0xFFCBD5E1).withOpacity(0.4); // AppTheme.outline with opacity
+      return const Color(
+        0xFFCBD5E1,
+      ).withOpacity(0.4); // AppTheme.outline with opacity
     }
   }
 
@@ -108,28 +110,8 @@ class MedicationInfo {
   }
 
   static String _getImageUrlForType(String? type) {
-    switch (type?.toLowerCase()) {
-      case 'pill':
-      case 'tablet':
-        return 'assets/icons/pill.png';
-      case 'capsule':
-        return 'assets/icons/capsule.png';
-      case 'syrup':
-      case 'liquid':
-        return 'assets/icons/syrup.png';
-      case 'injection':
-      case 'syringe':
-        return 'assets/icons/injection.png';
-      case 'inhaler':
-        return 'assets/icons/inhaler.png';
-      case 'drops':
-        return 'assets/icons/drops.png';
-      case 'cream':
-      case 'ointment':
-        return 'assets/icons/cream.png';
-      default:
-        return 'assets/icons/pill.png';
-    }
+    if (type == null) return 'images/types/default.png';
+    return 'images/types/$type.png';
   }
 
   @override

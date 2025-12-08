@@ -40,7 +40,7 @@ class MedicationViewModel extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      final user = _authService.getCurrentUser();
+      final user = await _authService.getCurrentUser(); // Added await
       if (user == null) {
         print('Error: No user logged in');
         return;
@@ -158,7 +158,7 @@ class MedicationViewModel extends ChangeNotifier {
         return false;
       }
 
-      final user = _authService.getCurrentUser();
+      final user = await _authService.getCurrentUser(); // Added await
       if (user == null) {
         print('Error: No user logged in');
         return false;
@@ -202,7 +202,7 @@ class MedicationViewModel extends ChangeNotifier {
   //     return;
   //   }
 
-  //   final user = _authService.getCurrentUser();
+  //   final user = await _authService.getCurrentUser(); // Added await
   //   if (user == null) return;
 
   //   for (final time in _medication.scheduleTimes!) {

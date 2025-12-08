@@ -4,7 +4,6 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:medicare_app/theme.dart';
 import 'package:provider/provider.dart';
 import '../analysis_viewmodel.dart';
-import '../analysis_model.dart';
 
 class WeeklyView extends StatefulWidget {
   const WeeklyView({Key? key}) : super(key: key);
@@ -13,8 +12,7 @@ class WeeklyView extends StatefulWidget {
   State<WeeklyView> createState() => _WeeklyViewState();
 }
 
-class _WeeklyViewState extends State<WeeklyView>
-    with TickerProviderStateMixin {
+class _WeeklyViewState extends State<WeeklyView> with TickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
 
@@ -26,10 +24,7 @@ class _WeeklyViewState extends State<WeeklyView>
       vsync: this,
     );
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeInOut,
-      ),
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
   }
 
@@ -75,16 +70,19 @@ class _WeeklyViewState extends State<WeeklyView>
   }
 
   // FIXED: Use actual medication-specific adherence data
-  List<String?> _getMedicationAdherence(String medName, AnalysisViewModel viewModel) {
+  List<String?> _getMedicationAdherence(
+    String medName,
+    AnalysisViewModel viewModel,
+  ) {
     const serviceKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
     final medicationData = viewModel.weeklyMedicationData[medName];
-    
+
     if (medicationData == null) return List.filled(7, null);
-    
+
     return serviceKeys.map((dayKey) {
       final percentage = medicationData[dayKey] ?? 0.0;
       if (percentage >= 80) return 'taken';
-      if (percentage >= 20) return 'partial'; 
+      if (percentage >= 20) return 'partial';
       if (percentage >= 0.1) return 'missed';
       return null; // No data/not active
     }).toList();
@@ -185,10 +183,7 @@ class _WeeklyViewState extends State<WeeklyView>
       width: double.infinity,
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            const Color(0xFF4A90E2),
-            const Color(0xFF357ABD),
-          ],
+          colors: [const Color(0xFF4A90E2), const Color(0xFF357ABD)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -204,8 +199,11 @@ class _WeeklyViewState extends State<WeeklyView>
                 children: [
                   IconButton(
                     onPressed: viewModel.goToPreviousWeek,
-                    icon: Icon(Icons.chevron_left,
-                        color: Colors.white, size: 28),
+                    icon: Icon(
+                      Icons.chevron_left,
+                      color: Colors.white,
+                      size: 28,
+                    ),
                   ),
                   Text(
                     viewModel.currentWeekString,
@@ -217,8 +215,11 @@ class _WeeklyViewState extends State<WeeklyView>
                   ),
                   IconButton(
                     onPressed: viewModel.goToNextWeek,
-                    icon: Icon(Icons.chevron_right,
-                        color: Colors.white, size: 28),
+                    icon: Icon(
+                      Icons.chevron_right,
+                      color: Colors.white,
+                      size: 28,
+                    ),
                   ),
                 ],
               ),
@@ -229,7 +230,10 @@ class _WeeklyViewState extends State<WeeklyView>
     );
   }
 
-  Widget _buildMedicationTable(BuildContext context, AnalysisViewModel viewModel) {
+  Widget _buildMedicationTable(
+    BuildContext context,
+    AnalysisViewModel viewModel,
+  ) {
     const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
     // FIXED: Use actual weekly medications instead of estimating from today's data
@@ -261,9 +265,9 @@ class _WeeklyViewState extends State<WeeklyView>
             const SizedBox(height: 8),
             Text(
               'No medications were tracked during this week.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Colors.grey.shade600,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
               textAlign: TextAlign.center,
             ),
           ],
@@ -291,9 +295,9 @@ class _WeeklyViewState extends State<WeeklyView>
             padding: const EdgeInsets.all(16),
             child: Text(
               'Individual Medication Adherence',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
           ),
           Container(
@@ -311,22 +315,21 @@ class _WeeklyViewState extends State<WeeklyView>
                   width: 80,
                   child: Text(
                     'Medication',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
+                ),
+                ...daysOfWeek.map(
+                  (day) => Expanded(
+                    child: Text(
+                      day,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 ),
-                ...daysOfWeek.map((day) => Expanded(
-                  child: Text(
-                    day,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                )),
               ],
             ),
           ),
@@ -414,8 +417,11 @@ class _WeeklyViewState extends State<WeeklyView>
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.info_outline,
-                          size: 16, color: Colors.grey.shade600),
+                      Icon(
+                        Icons.info_outline,
+                        size: 16,
+                        color: Colors.grey.shade600,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         'Legend:',
@@ -431,10 +437,26 @@ class _WeeklyViewState extends State<WeeklyView>
                     spacing: 16,
                     runSpacing: 4,
                     children: [
-                      _buildLegendItem(Colors.green, Icons.check, 'Taken (≥80%)'),
-                      _buildLegendItem(Colors.orange, Icons.remove, 'Partial (20-79%)'),
-                      _buildLegendItem(Colors.red, Icons.close, 'Missed (<20%)'),
-                      _buildLegendItem(Colors.grey.shade300, Icons.help_outline, 'No data'),
+                      _buildLegendItem(
+                        Colors.green,
+                        Icons.check,
+                        'Taken (≥80%)',
+                      ),
+                      _buildLegendItem(
+                        Colors.orange,
+                        Icons.remove,
+                        'Partial (20-79%)',
+                      ),
+                      _buildLegendItem(
+                        Colors.red,
+                        Icons.close,
+                        'Missed (<20%)',
+                      ),
+                      _buildLegendItem(
+                        Colors.grey.shade300,
+                        Icons.help_outline,
+                        'No data',
+                      ),
                     ],
                   ),
                 ],
@@ -456,19 +478,12 @@ class _WeeklyViewState extends State<WeeklyView>
             color: color,
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(
-            icon,
-            color: Colors.white,
-            size: 10,
-          ),
+          child: Icon(icon, color: Colors.white, size: 10),
         ),
         const SizedBox(width: 4),
         Text(
           label,
-          style: TextStyle(
-            fontSize: 11,
-            color: Colors.grey.shade600,
-          ),
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
         ),
       ],
     );
@@ -477,9 +492,9 @@ class _WeeklyViewState extends State<WeeklyView>
   Widget _buildBarChart(BuildContext context, AnalysisViewModel viewModel) {
     const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const serviceKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-    
+
     final weeklyData = viewModel.weeklyAdherenceData;
-    
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
@@ -500,9 +515,9 @@ class _WeeklyViewState extends State<WeeklyView>
           children: [
             Text(
               'Daily Average Adherence',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             SizedBox(
@@ -548,17 +563,19 @@ class _WeeklyViewState extends State<WeeklyView>
                         interval: 20,
                       ),
                     ),
-                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
                   ),
                   gridData: FlGridData(
                     show: true,
                     drawVerticalLine: false,
                     horizontalInterval: 20,
-                    getDrawingHorizontalLine: (value) => FlLine(
-                      color: Colors.grey.shade300,
-                      strokeWidth: 0.5,
-                    ),
+                    getDrawingHorizontalLine: (value) =>
+                        FlLine(color: Colors.grey.shade300, strokeWidth: 0.5),
                   ),
                   borderData: FlBorderData(
                     show: true,
@@ -571,17 +588,17 @@ class _WeeklyViewState extends State<WeeklyView>
                     final index = entry.key;
                     final dayKey = serviceKeys[index];
                     final value = weeklyData[dayKey] ?? 0.0;
-                    
+
                     return BarChartGroupData(
                       x: index,
                       barRods: [
                         BarChartRodData(
                           toY: value,
-                          color: value >= 80.0 
-                              ? Colors.green 
-                              : value >= 50.0 
-                                  ? Colors.orange 
-                                  : Colors.red,
+                          color: value >= 80.0
+                              ? Colors.green
+                              : value >= 50.0
+                              ? Colors.orange
+                              : Colors.red,
                           width: 20,
                           borderRadius: const BorderRadius.only(
                             topLeft: Radius.circular(2),

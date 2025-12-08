@@ -14,20 +14,21 @@ import '/data/models/med.dart'; // Hive Med with List<TimeOfDay> scheduleTimes
 class ProfileViewModel extends ChangeNotifier {
   static SupabaseClient get _client => Supabase.instance.client;
   final AuthService _authService = AuthService();
-  
+
   // === STATE PROPERTIES ===
   bool _isLoading = false;
   String? _error;
   ProfileModel? _profile;
   bool _isSigningOut = false;
-  Box<Med>? _medicationsBox; // Make it nullable to avoid LateInitializationError
+  Box<Med>?
+  _medicationsBox; // Make it nullable to avoid LateInitializationError
 
   // === GETTERS ===
   bool get isLoading => _isLoading;
   String? get error => _error;
   ProfileModel? get profile => _profile;
   bool get isSigningOut => _isSigningOut;
-  
+
   // Convenience getters
   ProfileUserModel? get user => _profile?.user;
   ProfileStatsModel? get stats => _profile?.stats;
@@ -51,49 +52,43 @@ class ProfileViewModel extends ChangeNotifier {
   }
 
   // === PUBLIC METHODS ===
-  
+
   /// Load user profile and statistics (LOCAL ONLY)
   Future<void> loadProfile() async {
     _setLoading(true);
     _clearError();
 
     try {
-      // Get current user from auth service (this is LOCAL - from auth session)
-      final currentUser = _authService.getCurrentUser();
+      // Get current user from auth service (now async to get name from DB)
+      final currentUser = await _authService.getCurrentUser(); // Added await
       if (currentUser == null) {
         throw 'No authenticated user found';
       }
-      
-      
-      // 1. USE LOCAL DATA ONLY - no Supabase queries for name/email
-      // The AuthService.getCurrentUser() gives us ID and email from local auth session
-      // For name, we assume it's available locally or use a default
-      
+
+      // 1. Get user data including name from database
+      // The AuthService.getCurrentUser() now fetches name from Supabase users table
+
       // 2. Get medicine count from LOCAL Hive storage
-        await _openMedicationsBox(); // <-- ADD THIS LINE
+      await _openMedicationsBox();
 
       final medicineCount = _getLocalMedicineCount();
-      
-      // Create profile models using LOCAL data only
+
+      // Create profile models using data from auth service
       final profileUser = ProfileUserModel(
         id: currentUser.id,
-        name: currentUser.name ?? 'User', // Use name from local auth model
+        name: currentUser.name ?? 'User', // Name now comes from database
         email: currentUser.email,
         createdAt: DateTime.now(), // or store this locally
       );
-      
+
       final profileStats = ProfileStatsModel(
         totalMedicines: medicineCount,
         lastActivity: null, // Local data only
       );
-      
-      _profile = ProfileModel(
-        user: profileUser,
-        stats: profileStats,
-      );
-      
-      print("Profile loaded successfully (LOCAL ONLY)");
-      
+
+      _profile = ProfileModel(user: profileUser, stats: profileStats);
+
+      print("Profile loaded successfully with name: ${currentUser.name}");
     } catch (e) {
       print('Error loading profile: $e');
       _setError('Failed to load profile: $e');
@@ -114,16 +109,15 @@ class ProfileViewModel extends ChangeNotifier {
 
     try {
       print("Updating user name locally to: $newName");
-      
+
       // UPDATE LOCAL STATE ONLY - no Supabase calls for profile data
       if (_profile != null) {
         _profile = _profile!.copyWith(
           user: _profile!.user.copyWith(name: newName),
         );
       }
-      
+
       print("User name updated successfully (LOCAL ONLY)");
-      
     } catch (e) {
       print('Error updating user name: $e');
       _setError('Failed to update name: $e');
@@ -139,16 +133,15 @@ class ProfileViewModel extends ChangeNotifier {
 
     try {
       print("Updating user email locally to: $newEmail");
-      
+
       // UPDATE LOCAL STATE ONLY - no Supabase calls for profile data
       if (_profile != null) {
         _profile = _profile!.copyWith(
           user: _profile!.user.copyWith(email: newEmail),
         );
       }
-      
+
       print("User email updated successfully (LOCAL ONLY)");
-      
     } catch (e) {
       print('Error updating user email: $e');
       _setError('Failed to update email: $e');
@@ -159,33 +152,33 @@ class ProfileViewModel extends ChangeNotifier {
 
   /// Sign out user - clear Supabase session only
   Future<bool> signOut() async {
-  _isSigningOut = true;
-  _clearError();
-  notifyListeners();
-  try {
-    print("Signing out user");
-   
-    // Backup data before signing out
-    await backupAllToSingleJson();
-   
-    // Sign out from Supabase (clears session)
-    await _client.auth.signOut();
-   
-    // Clear profile data
-    _profile = null;
-   
-    print("User signed out successfully");
-    return true;
-    
-  } catch (e) {
-    print('Error signing out: $e');
-    _setError('Failed to sign out: $e');
-    return false;
-  } finally {
-    _isSigningOut = false;
+    _isSigningOut = true;
+    _clearError();
     notifyListeners();
+    try {
+      print("Signing out user");
+
+      // Backup data before signing out
+      await backupAllToSingleJson();
+
+      // Sign out from Supabase (clears session)
+      await _client.auth.signOut();
+
+      // Clear profile data
+      _profile = null;
+
+      print("User signed out successfully");
+      return true;
+    } catch (e) {
+      print('Error signing out: $e');
+      _setError('Failed to sign out: $e');
+      return false;
+    } finally {
+      _isSigningOut = false;
+      notifyListeners();
+    }
   }
-}
+
   /// Clear any cached data
   void clearData() {
     _profile = null;
@@ -198,20 +191,20 @@ class ProfileViewModel extends ChangeNotifier {
   // === PRIVATE METHODS ===
 
   /// Get medicine count from LOCAL Hive storage
-/// Get *active* medicine count from LOCAL Hive storage
-int _getLocalMedicineCount() {
-  try {
-    if (_medicationsBox == null) return 0;
-    final now = DateTime.now();
-    return _medicationsBox!.values.where((med) {
-      if (med.endAt == null) return true;
-      return !med.endAt!.isBefore(now);
-    }).length;
-  } catch (e) {
-    debugPrint('Error counting active medicines: $e');
-    return 0;
+  /// Get *active* medicine count from LOCAL Hive storage
+  int _getLocalMedicineCount() {
+    try {
+      if (_medicationsBox == null) return 0;
+      final now = DateTime.now();
+      return _medicationsBox!.values.where((med) {
+        if (med.endAt == null) return true;
+        return !med.endAt!.isBefore(now);
+      }).length;
+    } catch (e) {
+      debugPrint('Error counting active medicines: $e');
+      return 0;
+    }
   }
-}
   // === PRIVATE STATE METHODS ===
 
   /// Set loading state

@@ -5,7 +5,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:provider/provider.dart';
 import '../analysis_viewmodel.dart';
 
-// --- Monthly View for displaying adherence trend line chart ---
+/// FIXED Monthly View with proper date labels, percentage axis, and complete data range
 class MonthlyView extends StatelessWidget {
   const MonthlyView({Key? key}) : super(key: key);
 
@@ -13,9 +13,7 @@ class MonthlyView extends StatelessWidget {
   Widget build(BuildContext context) {
     final viewModel = Provider.of<AnalysisViewModel>(context);
 
-    return SingleChildScrollView(
-      child: _buildContent(context, viewModel),
-    );
+    return SingleChildScrollView(child: _buildContent(context, viewModel));
   }
 
   // --- Content ---
@@ -33,6 +31,13 @@ class MonthlyView extends StatelessWidget {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
+            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const SizedBox(height: 16),
+            Text(
+              'Failed to load data',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
             Text(
               viewModel.error!,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -40,7 +45,7 @@ class MonthlyView extends StatelessWidget {
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () => viewModel.refreshData(),
               child: const Text('Retry'),
@@ -71,7 +76,9 @@ class MonthlyView extends StatelessWidget {
               ),
               Text(
                 viewModel.currentMonthString,
-                style: Theme.of(context).textTheme.titleLarge,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
               ),
               IconButton(
                 icon: const Icon(Icons.chevron_right),
@@ -79,24 +86,35 @@ class MonthlyView extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 24),
+
+          // Chart Title
+          Text(
+            'Daily Medication Adherence',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
           const SizedBox(height: 16),
+
           // Line chart
           SizedBox(
-            height: 250, // Reduced height
+            height: 280,
             child: Card(
-              elevation: 0,
+              elevation: 2,
               margin: EdgeInsets.zero,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(
+                  color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+                  width: 1,
+                ),
+              ),
               child: Padding(
-  padding: const EdgeInsets.fromLTRB(16, 30, 16, 16), // Extra top padding
+                padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
                 child: viewModel.monthlyChartData.isEmpty
-                    ? Center(
-                        child: Text(
-                          'No data available',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      )
+                    ? _buildEmptyState(context)
                     : LineChart(
                         LineChartData(
                           gridData: FlGridData(
@@ -104,7 +122,9 @@ class MonthlyView extends StatelessWidget {
                             drawVerticalLine: false,
                             horizontalInterval: 25,
                             getDrawingHorizontalLine: (value) => FlLine(
-                              color: Theme.of(context).colorScheme.outline.withOpacity(0.1),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.outline.withOpacity(0.15),
                               strokeWidth: 1,
                             ),
                           ),
@@ -113,56 +133,85 @@ class MonthlyView extends StatelessWidget {
                               sideTitles: SideTitles(
                                 showTitles: true,
                                 getTitlesWidget: (value, meta) {
-                                  if (value.toInt() >= viewModel.monthlyChartData.length) {
+                                  final index = value.toInt();
+                                  if (index < 0 ||
+                                      index >=
+                                          viewModel.monthlyChartData.length) {
                                     return const SizedBox.shrink();
                                   }
-                                  final date = viewModel.monthlyChartData[value.toInt()].date;
-                                  final day = int.parse(date.split('-').last);
-                                  
-                                  // Show fewer labels for cleaner look
-                                  if (day % 5 == 0 || day == 1) {
+
+                                  final dataPoint =
+                                      viewModel.monthlyChartData[index];
+                                  // Parse the ISO date string (e.g., "2025-08-15")
+                                  final dateParts = dataPoint.date.split('-');
+                                  if (dateParts.length != 3) {
+                                    return const SizedBox.shrink();
+                                  }
+
+                                  final day = int.parse(dateParts[2]);
+
+                                  // FIXED: Show labels every 5 days or day 1
+                                  if (day == 1 || day % 5 == 0) {
                                     return Padding(
                                       padding: const EdgeInsets.only(top: 8),
                                       child: Text(
-                                        day.toString(),
-                                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                        ),
+                                        '$day',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.onSurfaceVariant,
+                                              fontSize: 12,
+                                            ),
                                       ),
                                     );
                                   }
                                   return const SizedBox.shrink();
                                 },
-                                reservedSize: 24,
+                                reservedSize: 32,
                               ),
                             ),
                             leftTitles: AxisTitles(
                               sideTitles: SideTitles(
                                 showTitles: true,
-                                getTitlesWidget: (value, meta) => Text(
-                                  '${value.toInt()}%',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                                reservedSize: 35,
+                                getTitlesWidget: (value, meta) {
+                                  // FIXED: Show percentage labels (0%, 25%, 50%, 75%, 100%)
+                                  if (value % 25 == 0) {
+                                    return Text(
+                                      '${value.toInt()}%',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.onSurfaceVariant,
+                                            fontSize: 12,
+                                          ),
+                                    );
+                                  }
+                                  return const SizedBox.shrink();
+                                },
+                                reservedSize: 42,
                                 interval: 25,
                               ),
                             ),
-                            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                            topTitles: const AxisTitles(
+                              sideTitles: SideTitles(showTitles: false),
+                            ),
+                            rightTitles: const AxisTitles(
+                              sideTitles: SideTitles(showTitles: false),
+                            ),
                           ),
                           borderData: FlBorderData(
                             show: true,
-                            border: Border(
-                              bottom: BorderSide(
-                                color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
-                                width: 1,
-                              ),
-                              left: BorderSide(
-                                color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
-                                width: 1,
-                              ),
+                            border: Border.all(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.outline.withOpacity(0.2),
+                              width: 1,
                             ),
                           ),
                           minY: 0,
@@ -172,28 +221,44 @@ class MonthlyView extends StatelessWidget {
                               spots: viewModel.monthlyChartData
                                   .asMap()
                                   .entries
-                                  .map((e) => FlSpot(e.key.toDouble(), e.value.value))
+                                  .map(
+                                    (e) =>
+                                        FlSpot(e.key.toDouble(), e.value.value),
+                                  )
                                   .toList(),
                               isCurved: true,
-                              
-                              curveSmoothness: 0.2,
+                              curveSmoothness: 0.25,
                               color: Theme.of(context).colorScheme.primary,
-                              barWidth: 2.5,
+                              barWidth: 3,
                               belowBarData: BarAreaData(
                                 show: true,
-                                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                                gradient: LinearGradient(
+                                  colors: [
+                                    Theme.of(
+                                      context,
+                                    ).colorScheme.primary.withOpacity(0.3),
+                                    Theme.of(
+                                      context,
+                                    ).colorScheme.primary.withOpacity(0.05),
+                                  ],
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                ),
                               ),
                               dotData: FlDotData(
                                 show: true,
                                 checkToShowDot: (spot, barData) {
-                                  // Only show dots for data points with actual values > 0
+                                  // Show dots only for non-zero values to highlight actual data
                                   return spot.y > 0;
                                 },
                                 getDotPainter: (spot, percent, barData, index) {
                                   return FlDotCirclePainter(
                                     radius: 3,
-                                    color: Theme.of(context).colorScheme.primary,
-                                    strokeWidth: 0,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                    strokeWidth: 1.5,
+                                    strokeColor: Colors.white,
                                   );
                                 },
                               ),
@@ -202,16 +267,30 @@ class MonthlyView extends StatelessWidget {
                           lineTouchData: LineTouchData(
                             enabled: true,
                             touchTooltipData: LineTouchTooltipData(
-                              // tooltipBgColor: Theme.of(context).colorScheme.inverseSurface,
-                      tooltipBorderRadius: BorderRadius.circular(8.0),
-                              tooltipPadding: const EdgeInsets.all(8),
-                              getTooltipItems: (touchedSpots) => touchedSpots.map((spot) {
-                                final day = viewModel.monthlyChartData[spot.x.toInt()];
-                                final dayNum = day.date.split('-').last;
+                              getTooltipColor: (touchedSpot) =>
+                                  Theme.of(context).colorScheme.inverseSurface,
+                              tooltipPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              getTooltipItems: (touchedSpots) => touchedSpots.map((
+                                spot,
+                              ) {
+                                final dataPoint =
+                                    viewModel.monthlyChartData[spot.x.toInt()];
+                                // Parse date for display
+                                final dateParts = dataPoint.date.split('-');
+                                final month = _getMonthAbbreviation(
+                                  int.parse(dateParts[1]),
+                                );
+                                final day = int.parse(dateParts[2]);
+
                                 return LineTooltipItem(
-                                  'Day $dayNum\n${day.value.toStringAsFixed(1)}%',
+                                  '$month $day\n${dataPoint.value.toStringAsFixed(1)}%',
                                   TextStyle(
-                                    color: Theme.of(context).colorScheme.onInverseSurface,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onInverseSurface,
                                     fontSize: 12,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -225,22 +304,32 @@ class MonthlyView extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
+
           // Summary stats
           if (viewModel.hasMonthlyData) ...[
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _buildSummaryCard(
-                  context,
-                  'Average',
-                  '${viewModel.monthlyAverageAdherence.toStringAsFixed(1)}%',
-                  Icons.analytics_outlined,
+                Expanded(
+                  child: _buildSummaryCard(
+                    context,
+                    'Average Adherence',
+                    '${viewModel.monthlyAverageAdherence.toStringAsFixed(1)}%',
+                    Icons.trending_up,
+                    _getAdherenceColor(
+                      viewModel.monthlyAverageAdherence,
+                      context,
+                    ),
+                  ),
                 ),
-                _buildSummaryCard(
-                  context,
-                  'Days Active',
-                  '${viewModel.monthlyData.where((d) => d.hasActivity).length}',
-                  Icons.calendar_today_outlined,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildSummaryCard(
+                    context,
+                    'Days Tracked',
+                    '${_countActiveDays(viewModel)}',
+                    Icons.calendar_today,
+                    Theme.of(context).colorScheme.primary,
+                  ),
                 ),
               ],
             ),
@@ -250,44 +339,109 @@ class MonthlyView extends StatelessWidget {
     );
   }
 
-  Widget _buildSummaryCard(BuildContext context, String label, String value, IconData icon) {
-    return Expanded(
-      child: Card(
-        elevation: 0,
-        margin: const EdgeInsets.symmetric(horizontal: 4),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 16,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
+  // FIXED: Better empty state
+  Widget _buildEmptyState(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.medication_outlined,
+            size: 48,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No medication data yet',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Start tracking your medications to see\nyour adherence trends here',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryCard(
+    BuildContext context,
+    String label,
+    String value,
+    IconData icon,
+    Color iconColor,
+  ) {
+    return Card(
+      elevation: 0,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 20, color: iconColor),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
                     label,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                  Text(
-                    value,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
+  }
+
+  // FIXED: Count only days with actual activity (adherence > 0 or explicitly logged as 0)
+  int _countActiveDays(AnalysisViewModel viewModel) {
+    return viewModel.monthlyData.where((d) => d.hasActivity).length;
+  }
+
+  // Helper to determine adherence quality color
+  Color _getAdherenceColor(double percentage, BuildContext context) {
+    if (percentage >= 80) return Colors.green;
+    if (percentage >= 60) return Colors.orange;
+    return Colors.red;
+  }
+
+  // Helper to get month abbreviation
+  String _getMonthAbbreviation(int month) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return months[month - 1];
   }
 }
