@@ -170,33 +170,33 @@ class _HomepageState extends State<Homepage> with RouteAware {
         if (noDosesToday) {
           // Has medications but no doses scheduled today
           return Container(
-            height: 300,
+            height: 260,
             margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 20),
             child: Card(
               elevation: 1,
               child: Container(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(20),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
                         color: AppTheme.accent.withOpacity(0.1),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
                         Icons.event_available,
-                        size: 48,
+                        size: 40,
                         color: AppTheme.accent,
                       ),
                     ),
-                    SizedBox(height: 20),
+                    SizedBox(height: 16),
                     Text(
                       'All set for today, $userName!',
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
-                    SizedBox(height: 8),
+                    SizedBox(height: 6),
                     Text(
                       'No doses scheduled for today.\nEnjoy your day!',
                       textAlign: TextAlign.center,
@@ -211,19 +211,19 @@ class _HomepageState extends State<Homepage> with RouteAware {
           );
         }
 
-        // No medications at all
+        // No active medications
         return Container(
-          height: 300,
+          height: 260,
           margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 20),
           child: Card(
             elevation: 1,
             child: Container(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(20),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: AppTheme.surfaceMuted,
                       shape: BoxShape.circle,
@@ -236,30 +236,30 @@ class _HomepageState extends State<Homepage> with RouteAware {
                     ),
                     child: Icon(
                       Icons.medication_liquid,
-                      size: 48,
+                      size: 40,
                       color: AppTheme.lightText,
                     ),
                   ),
-                  SizedBox(height: 20),
+                  SizedBox(height: 16),
                   Text(
-                    'Welcome, $userName!',
+                    'No active medications',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
-                  SizedBox(height: 8),
+                  SizedBox(height: 6),
                   Text(
-                    'Start tracking your medications to\nnever miss a dose again',
+                    'You\'re all set for now.\nAdd a medication when you need to.',
                     textAlign: TextAlign.center,
                     style: Theme.of(
                       context,
                     ).textTheme.bodyMedium?.copyWith(color: AppTheme.lightText),
                   ),
-                  SizedBox(height: 24),
+                  SizedBox(height: 20),
                   ElevatedButton.icon(
                     onPressed: () =>
                         Navigator.pushNamed(context, '/new_medicine'),
                     icon: const Icon(Icons.add, size: 18),
                     label: const Text(
-                      'Add Your First Medication',
+                      'Add Medication',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
@@ -292,7 +292,7 @@ class HeroSection extends StatelessWidget {
           // Personalized greeting at the top
           Positioned(
             top: 10,
-            left: 10,
+            right: 10,
             child: Consumer<AuthViewModel>(
               builder: (context, authViewModel, _) {
                 final userName = authViewModel.user?.name ?? 'there';

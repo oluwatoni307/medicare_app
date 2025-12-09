@@ -1,4 +1,4 @@
-// lib/features/analysis/analysis_view.dart - FIXED VERSION
+// lib/features/analysis/analysis_view.dart
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -15,7 +15,8 @@ class AnalysisDashboardView extends StatefulWidget {
   State<AnalysisDashboardView> createState() => _AnalysisDashboardViewState();
 }
 
-class _AnalysisDashboardViewState extends State<AnalysisDashboardView> with TickerProviderStateMixin {
+class _AnalysisDashboardViewState extends State<AnalysisDashboardView>
+    with TickerProviderStateMixin {
   late TabController _tabController;
 
   @override
@@ -32,21 +33,21 @@ class _AnalysisDashboardViewState extends State<AnalysisDashboardView> with Tick
 
   @override
   Widget build(BuildContext context) {
-    // ✅ FIXED: Move ChangeNotifierProvider to the top level
     return ChangeNotifierProvider(
       create: (context) => AnalysisViewModel()..loadAllData(),
       child: Scaffold(
         bottomNavigationBar: const BottomNavBar(currentIndex: 1),
         body: Consumer<AnalysisViewModel>(
           builder: (context, viewModel, child) {
-            // ✅ FIXED: Add listener here where Provider is available
             _tabController.addListener(() {
               if (!_tabController.indexIsChanging) {
-                viewModel.setSelectedView(_tabController.index == 0
-                    ? 'Monthly'
-                    : _tabController.index == 1
-                        ? 'Weekly'
-                        : 'Daily');
+                viewModel.setSelectedView(
+                  _tabController.index == 0
+                      ? 'Monthly'
+                      : _tabController.index == 1
+                      ? 'Weekly'
+                      : 'Daily',
+                );
               }
             });
 
@@ -70,11 +71,7 @@ class _AnalysisDashboardViewState extends State<AnalysisDashboardView> with Tick
                 Expanded(
                   child: TabBarView(
                     controller: _tabController,
-                    children: const [
-                      MonthlyView(),
-                      WeeklyView(),
-                      DailyView(),
-                    ],
+                    children: const [MonthlyView(), WeeklyView(), DailyView()],
                   ),
                 ),
               ],
@@ -85,6 +82,7 @@ class _AnalysisDashboardViewState extends State<AnalysisDashboardView> with Tick
     );
   }
 
+  // SIMPLIFIED HEADER - Clean and minimal
   Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 23, 14, 10),
@@ -105,7 +103,7 @@ class _AnalysisDashboardViewState extends State<AnalysisDashboardView> with Tick
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(
-              Icons.access_time,
+              Icons.analytics_outlined,
               color: Colors.white,
               size: 30,
             ),
@@ -116,20 +114,20 @@ class _AnalysisDashboardViewState extends State<AnalysisDashboardView> with Tick
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Stay on track with\nyour health goals!',
+                  'Analysis Dashboard',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 20,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                     height: 1.2,
                   ),
                 ),
-                SizedBox(height: 8),
+                SizedBox(height: 6),
                 Text(
-                  'Your dashboard keeps you consistent and on track.',
+                  'Track your medication adherence',
                   style: TextStyle(
                     fontSize: 14,
-                    color: Colors.white,
+                    color: Colors.white70,
                     height: 1.3,
                   ),
                 ),

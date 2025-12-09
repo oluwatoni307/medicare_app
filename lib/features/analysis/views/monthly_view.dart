@@ -5,7 +5,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:provider/provider.dart';
 import '../analysis_viewmodel.dart';
 
-/// FIXED Monthly View with proper date labels, percentage axis, and complete data range
+/// Monthly View with elegant motivational card, green chart, proper date labels
 class MonthlyView extends StatelessWidget {
   const MonthlyView({Key? key}) : super(key: key);
 
@@ -16,8 +16,6 @@ class MonthlyView extends StatelessWidget {
     return SingleChildScrollView(child: _buildContent(context, viewModel));
   }
 
-  // --- Content ---
-  /// Displays loading, error, or the monthly adherence chart.
   Widget _buildContent(BuildContext context, AnalysisViewModel viewModel) {
     if (viewModel.isLoadingMonthly) {
       return const Padding(
@@ -58,14 +56,16 @@ class MonthlyView extends StatelessWidget {
     return _buildMonthlyChart(context, viewModel);
   }
 
-  // --- Monthly Chart ---
-  /// Displays a line chart of monthly adherence trends.
   Widget _buildMonthlyChart(BuildContext context, AnalysisViewModel viewModel) {
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ELEGANT MOTIVATIONAL CARD
+          _buildMotivationalHeader(context),
+          const SizedBox(height: 24),
+
           // Month selector
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -117,6 +117,11 @@ class MonthlyView extends StatelessWidget {
                     ? _buildEmptyState(context)
                     : LineChart(
                         LineChartData(
+                          minX: 0,
+                          maxX: (_getDaysInMonth(viewModel.currentMonth) - 1)
+                              .toDouble(),
+                          minY: 0,
+                          maxY: 100,
                           gridData: FlGridData(
                             show: true,
                             drawVerticalLine: false,
@@ -132,26 +137,19 @@ class MonthlyView extends StatelessWidget {
                             bottomTitles: AxisTitles(
                               sideTitles: SideTitles(
                                 showTitles: true,
+                                interval: 1,
                                 getTitlesWidget: (value, meta) {
-                                  final index = value.toInt();
-                                  if (index < 0 ||
-                                      index >=
-                                          viewModel.monthlyChartData.length) {
-                                    return const SizedBox.shrink();
-                                  }
+                                  final day = value.toInt() + 1;
+                                  final daysInMonth = _getDaysInMonth(
+                                    viewModel.currentMonth,
+                                  );
 
-                                  final dataPoint =
-                                      viewModel.monthlyChartData[index];
-                                  // Parse the ISO date string (e.g., "2025-08-15")
-                                  final dateParts = dataPoint.date.split('-');
-                                  if (dateParts.length != 3) {
-                                    return const SizedBox.shrink();
-                                  }
-
-                                  final day = int.parse(dateParts[2]);
-
-                                  // FIXED: Show labels every 5 days or day 1
-                                  if (day == 1 || day % 5 == 0) {
+                                  if (day == 1 ||
+                                      day == 7 ||
+                                      day == 14 ||
+                                      day == 21 ||
+                                      day == 28 ||
+                                      day == daysInMonth) {
                                     return Padding(
                                       padding: const EdgeInsets.only(top: 8),
                                       child: Text(
@@ -177,7 +175,6 @@ class MonthlyView extends StatelessWidget {
                               sideTitles: SideTitles(
                                 showTitles: true,
                                 getTitlesWidget: (value, meta) {
-                                  // FIXED: Show percentage labels (0%, 25%, 50%, 75%, 100%)
                                   if (value % 25 == 0) {
                                     return Text(
                                       '${value.toInt()}%',
@@ -214,32 +211,19 @@ class MonthlyView extends StatelessWidget {
                               width: 1,
                             ),
                           ),
-                          minY: 0,
-                          maxY: 100,
                           lineBarsData: [
                             LineChartBarData(
-                              spots: viewModel.monthlyChartData
-                                  .asMap()
-                                  .entries
-                                  .map(
-                                    (e) =>
-                                        FlSpot(e.key.toDouble(), e.value.value),
-                                  )
-                                  .toList(),
+                              spots: _buildMonthlySpots(viewModel),
                               isCurved: true,
                               curveSmoothness: 0.25,
-                              color: Theme.of(context).colorScheme.primary,
+                              color: const Color(0xFF66BB6A),
                               barWidth: 3,
                               belowBarData: BarAreaData(
                                 show: true,
                                 gradient: LinearGradient(
                                   colors: [
-                                    Theme.of(
-                                      context,
-                                    ).colorScheme.primary.withOpacity(0.3),
-                                    Theme.of(
-                                      context,
-                                    ).colorScheme.primary.withOpacity(0.05),
+                                    const Color(0xFF66BB6A).withOpacity(0.3),
+                                    const Color(0xFF66BB6A).withOpacity(0.05),
                                   ],
                                   begin: Alignment.topCenter,
                                   end: Alignment.bottomCenter,
@@ -247,16 +231,11 @@ class MonthlyView extends StatelessWidget {
                               ),
                               dotData: FlDotData(
                                 show: true,
-                                checkToShowDot: (spot, barData) {
-                                  // Show dots only for non-zero values to highlight actual data
-                                  return spot.y > 0;
-                                },
+                                checkToShowDot: (spot, barData) => spot.y > 0,
                                 getDotPainter: (spot, percent, barData, index) {
                                   return FlDotCirclePainter(
                                     radius: 3,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.primary,
+                                    color: const Color(0xFF66BB6A),
                                     strokeWidth: 1.5,
                                     strokeColor: Colors.white,
                                   );
@@ -273,29 +252,24 @@ class MonthlyView extends StatelessWidget {
                                 horizontal: 12,
                                 vertical: 8,
                               ),
-                              getTooltipItems: (touchedSpots) => touchedSpots.map((
-                                spot,
-                              ) {
-                                final dataPoint =
-                                    viewModel.monthlyChartData[spot.x.toInt()];
-                                // Parse date for display
-                                final dateParts = dataPoint.date.split('-');
-                                final month = _getMonthAbbreviation(
-                                  int.parse(dateParts[1]),
-                                );
-                                final day = int.parse(dateParts[2]);
+                              getTooltipItems: (touchedSpots) =>
+                                  touchedSpots.map((spot) {
+                                    final day = spot.x.toInt() + 1;
+                                    final month = _getMonthAbbreviation(
+                                      viewModel.currentMonth.month,
+                                    );
 
-                                return LineTooltipItem(
-                                  '$month $day\n${dataPoint.value.toStringAsFixed(1)}%',
-                                  TextStyle(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onInverseSurface,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                );
-                              }).toList(),
+                                    return LineTooltipItem(
+                                      '$month $day\n${spot.y.toStringAsFixed(1)}%',
+                                      TextStyle(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onInverseSurface,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    );
+                                  }).toList(),
                             ),
                           ),
                         ),
@@ -328,7 +302,7 @@ class MonthlyView extends StatelessWidget {
                     'Days Tracked',
                     '${_countActiveDays(viewModel)}',
                     Icons.calendar_today,
-                    Theme.of(context).colorScheme.primary,
+                    const Color(0xFF66BB6A),
                   ),
                 ),
               ],
@@ -339,7 +313,68 @@ class MonthlyView extends StatelessWidget {
     );
   }
 
-  // FIXED: Better empty state
+  // ELEGANT MOTIVATIONAL HEADER CARD
+  Widget _buildMotivationalHeader(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF66BB6A).withOpacity(0.15),
+            const Color(0xFF81C784).withOpacity(0.08),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFF66BB6A).withOpacity(0.2),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF66BB6A).withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.favorite_rounded,
+              color: Color(0xFF66BB6A),
+              size: 28,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Stay on track with your health goals',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.onSurface,
+                    height: 1.3,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Your monthly dashboard highlights how well you stay consistent and informed',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildEmptyState(BuildContext context) {
     return Center(
       child: Column(
@@ -414,19 +449,16 @@ class MonthlyView extends StatelessWidget {
     );
   }
 
-  // FIXED: Count only days with actual activity (adherence > 0 or explicitly logged as 0)
   int _countActiveDays(AnalysisViewModel viewModel) {
     return viewModel.monthlyData.where((d) => d.hasActivity).length;
   }
 
-  // Helper to determine adherence quality color
   Color _getAdherenceColor(double percentage, BuildContext context) {
-    if (percentage >= 80) return Colors.green;
+    if (percentage >= 80) return const Color(0xFF66BB6A);
     if (percentage >= 60) return Colors.orange;
     return Colors.red;
   }
 
-  // Helper to get month abbreviation
   String _getMonthAbbreviation(int month) {
     const months = [
       'Jan',
@@ -443,5 +475,25 @@ class MonthlyView extends StatelessWidget {
       'Dec',
     ];
     return months[month - 1];
+  }
+
+  int _getDaysInMonth(DateTime month) {
+    return DateTime(month.year, month.month + 1, 0).day;
+  }
+
+  List<FlSpot> _buildMonthlySpots(AnalysisViewModel viewModel) {
+    final spots = <FlSpot>[];
+
+    for (final dataPoint in viewModel.monthlyChartData) {
+      try {
+        final date = DateTime.parse(dataPoint.date);
+        final dayOfMonth = date.day;
+        spots.add(FlSpot((dayOfMonth - 1).toDouble(), dataPoint.value));
+      } catch (e) {
+        debugPrint('Error parsing date: ${dataPoint.date}');
+      }
+    }
+
+    return spots;
   }
 }

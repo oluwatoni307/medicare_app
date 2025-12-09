@@ -62,7 +62,7 @@ Future<void> main() async {
     debugPrint('✅ Supabase initialized');
 
     // Initialize Notification Service (gets token & saves to DB)
-    await NotificationService.instance.init();
+    // await NotificationService.instance.init();
     debugPrint("✅ NotificationService initialized");
 
     // Initialize Medication Notification Handler (handles action buttons)

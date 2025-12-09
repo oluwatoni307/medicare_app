@@ -1,0 +1,68 @@
+b1eca9d 2025-12-08 fix: Improve HomeView and DailyView for better data handling and UI enhancements
+7706a94 2025-12-08 feat: Refactor MedicationDetailService for improved initialization and error handling
+f910e13 2025-11-29 tt
+0aa2a21 2025-11-29 Refactor HomeViewModel and DBhelper for improved data handling and summary features
+c3a3a4c 2025-11-27 tt
+3f9e58f 2025-11-26 Refactor LogViewModel and LogService for improved dose tracking and reminder management
+93d2c8f 2025-11-22 Refactor notification service to integrate Firebase Messaging and Supabase for reminder management; remove Awesome Notifications dependency and related code. Update main entry point to initialize Firebase and Supabase, and set up background message handling. Clean up unused files and adjust routes accordingly.
+6ac7a16 2025-11-22 Merge branch 'main' of https://github.com/oluwatoni307/medicare_app
+b9a9c85 2025-11-21 TT
+cf534b9 2025-11-19 up
+916b08c 2025-11-19 update1
+1b6ef8f 2025-11-19 update
+4c17a50 2025-11-19 test1
+627f80e 2025-09-11 alt  backend with distributed processing
+a0424d0 2025-09-10 alt  backend with distributed processing
+f34d0b9 2025-09-10 alt  backend with distributed processing
+e01546f 2025-09-07 alt  backend with distributed processing
+9dc13e2 2025-09-07 alt  backend with distributed processing
+3e666a7 2025-09-06 alt  backend with distributed processing
+c42e63e 2025-09-06 alt  backend with distributed processing
+74c1933 2025-09-06 alt  backend with distributed processing
+efd4057 2025-09-02 alt  backend with distributed processing
+77f70a9 2025-09-02 alt  backend with distributed processing
+f454c6a 2025-09-02 feat(notifications): update AndroidManifest and notification services; add reset.html
+4368519 2025-09-02 feat(notifications): update AndroidManifest and notification services; add reset.html
+5dd9513 2025-09-02 feat(notifications): update AndroidManifest and notification services; add reset.html
+0d98973 2025-09-02 feat(notifications): update AndroidManifest and notification services; add reset.html
+f1abf02 2025-09-02 feat(notifications): update AndroidManifest and notification services; add reset.html
+c8ff9a0 2025-09-02 feat(notifications): update AndroidManifest and notification services; add reset.html
+9f2f282 2025-09-02 feat(notifications): update AndroidManifest and notification services; add reset.html
+d43b442 2025-09-01 alt  backend with distributed processing
+fbf1e32 2025-09-01 alt  backend with distributed processing
+b86daa9 2025-08-30 alt  backend with distributed processing
+52f0480 2025-08-30 alt  backend with distributed processing
+bfe81a4 2025-08-30 alt  backend with distributed processing
+e3a9d0c 2025-08-28 alt  backend with distributed processing
+a2dd697 2025-08-28 alt  backend with distributed processing
+bd427cf 2025-08-28 alt  backend with distributed processing
+db5f533 2025-08-28 alt  backend with distributed processing
+174a204 2025-08-27 alt  backend with distributed processing
+cbb49a3 2025-08-27 alt  backend with distributed processing
+81c93d9 2025-08-27 alt  backend with distributed processing
+ae6fa37 2025-08-27 alt  backend with distributed processing
+f1cb9e1 2025-08-27 alt  backend with distributed processing
+a511f43 2025-08-27 alt  backend with distributed processing
+4da7d10 2025-08-27 alt  backend with distributed processing
+f3902d2 2025-08-27 alt  backend with distributed processing
+95644a1 2025-08-27 alt  backend with distributed processing
+26c36c7 2025-08-13 Initial commit
+0bb7165 2025-08-13 Initial commit
+3765fd3 2025-08-02 test
+b8912e5 2025-08-02 kjfkf
+77d1312 2025-08-02 lkyt
+8bcb194 2025-08-02 jjj
+e8facc5 2025-07-30 thtj
+8869f58 2025-07-29 ho
+f323d45 2025-07-29 ho
+addac80 2025-07-29 hi
+bd46b9a 2025-07-29 hi
+a13b4eb 2025-07-29 f
+d1e4bc9 2025-07-29 jj
+d04495e 2025-07-29 t
+af32446 2025-07-29 b
+b38f6dd 2025-07-29 k
+48c02f4 2025-07-29 update: Android build configuration
+f0524ef 2025-07-29 update AndroidManifest.xml
+02495f4 2025-07-28 changes made to AndroidManifest.xml
+b3ac0d6 2025-07-28 Initial commit
