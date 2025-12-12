@@ -85,7 +85,7 @@ class _AnalysisDashboardViewState extends State<AnalysisDashboardView>
   // SIMPLIFIED HEADER - Clean and minimal
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 23, 14, 10),
+      padding: const EdgeInsets.fromLTRB(14, 29, 14, 10),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [Color(0xFF4A90E2), Color(0xFF357ABD)],

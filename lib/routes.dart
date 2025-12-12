@@ -20,6 +20,7 @@ class AppRoutes {
 
   // Existing routes
   static const String home = '/';
+  static const String homepage = '/'; // Alias for home
   static const String new_medicine = '/new_medicine';
   static const String log = '/log';
   static const String edit_medication = '/edit';
@@ -39,8 +40,22 @@ class AppRoutes {
     edit_medication: (context) => MedicationView(),
     medication_list: (context) => const MedicationListView(),
     new_medicine: (context) => MedicationView(),
-    log: (context) =>
-        LogView(medicineId: '270cb55f-bcd0-42cd-9f62-1d22eaaa2c1d'),
+
+    // FIXED: Accept medicineId from navigation arguments
+    log: (context) {
+      final medicineId = ModalRoute.of(context)?.settings.arguments as String?;
+
+      // If no medicineId provided, show error or redirect
+      if (medicineId == null) {
+        return Scaffold(
+          appBar: AppBar(title: const Text('Error')),
+          body: const Center(child: Text('Medicine ID is required')),
+        );
+      }
+
+      return LogView(medicineId: medicineId);
+    },
+
     analysis: (context) => AnalysisDashboardView(),
     profile: (context) => ProfilePage(),
   };

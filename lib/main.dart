@@ -3,7 +3,6 @@ import 'package:medicare_app/data/hive_init.dart';
 import 'package:medicare_app/features/auth/service.dart';
 import 'package:medicare_app/features/auth/auth_viewmodel.dart';
 import 'package:medicare_app/features/notifications/service.dart';
-import 'package:medicare_app/features/notifications/medication_notification_handler.dart';
 import 'package:provider/provider.dart';
 import './theme.dart';
 import 'routes.dart' show AppRoutes;
@@ -13,23 +12,17 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:medicare_app/firebase_options.dart';
 
 /// ------------------------------------------------------
+/// GLOBAL NAVIGATOR KEY (for navigation from anywhere)
+/// ------------------------------------------------------
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+/// ------------------------------------------------------
 /// 1. BACKGROUND NOTIFICATION HANDLER
 /// ------------------------------------------------------
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   debugPrint("📩 Background message received: ${message.messageId}");
-
-  // Handle medication reminder notifications in background
-  if (message.data['notification_type'] == 'medication_reminder') {
-    await MedicationNotificationHandler.instance.showNotificationWithActions(
-      title: message.notification?.title ?? 'Medication Reminder',
-      body: message.notification?.body ?? 'Time to take your medication',
-      medicineId: message.data['medicine_id'],
-      scheduleId: message.data['schedule_id'],
-      reminderTime: message.data['reminder_time'],
-    );
-  }
 }
 
 String anonKey =
@@ -62,14 +55,20 @@ Future<void> main() async {
     debugPrint('✅ Supabase initialized');
 
     // Initialize Notification Service (gets token & saves to DB)
-    // await NotificationService.instance.init();
+    await NotificationService.instance.init();
     debugPrint("✅ NotificationService initialized");
 
-    // Initialize Medication Notification Handler (handles action buttons)
-    await MedicationNotificationHandler.instance.init();
-    debugPrint("✅ MedicationNotificationHandler initialized");
+    // Setup notification tap handlers
+    _setupNotificationTapHandlers();
+    debugPrint("✅ Notification tap handlers set up");
 
     // (Optional) background/periodic worker registration
+    try {
+      // await registerDailyWorker();
+      debugPrint("⚙️ Daily worker registered");
+    } catch (e) {
+      debugPrint("⚠️ Daily worker registration failed: $e");
+    }
 
     debugPrint("🚀 App initialized successfully");
   } catch (e) {
@@ -77,6 +76,52 @@ Future<void> main() async {
   }
 
   runApp(const MyApp());
+}
+
+/// ------------------------------------------------------
+/// NOTIFICATION TAP HANDLERS
+/// ------------------------------------------------------
+void _setupNotificationTapHandlers() {
+  // Handle notification tap when app is in background
+  FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+    debugPrint('📱 Notification tapped (app in background)');
+    debugPrint('📱 Data: ${message.data}');
+    _navigateToSpecialPage(message);
+  });
+
+  // Handle notification tap when app was completely closed
+  FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
+    if (message != null) {
+      debugPrint('📱 Notification tapped (app was closed)');
+      debugPrint('📱 Data: ${message.data}');
+      // Delay to ensure app is fully initialized
+      Future.delayed(const Duration(seconds: 1), () {
+        _navigateToSpecialPage(message);
+      });
+    }
+  });
+}
+
+void _navigateToSpecialPage(RemoteMessage message) {
+  // Extract data from notification
+  final medicineId = message.data['medicine_id'];
+  final notificationType = message.data['notification_type'];
+
+  debugPrint('🔔 Navigating based on notification type: $notificationType');
+
+  // Navigate to your special page
+  // Change AppRoutes.log to whatever page you want
+  if (medicineId != null) {
+    navigatorKey.currentState?.pushNamed(
+      AppRoutes.log, // CHANGE THIS to your desired route
+      arguments: medicineId,
+    );
+    debugPrint('✅ Navigated to log page for medicine: $medicineId');
+  } else {
+    // If no medicine_id, navigate to a default page
+    navigatorKey.currentState?.pushNamed(AppRoutes.home);
+    debugPrint('✅ Navigated to homepage (no medicine_id)');
+  }
 }
 
 /// ------------------------------------------------------
@@ -96,6 +141,7 @@ class MyApp extends StatelessWidget {
         ),
       ],
       child: MaterialApp(
+        navigatorKey: navigatorKey, // ADD THIS LINE - very important!
         debugShowCheckedModeBanner: false,
         title: 'Medstracker',
         theme: AppTheme.lightTheme,

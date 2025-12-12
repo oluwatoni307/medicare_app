@@ -277,6 +277,8 @@ class _HomepageState extends State<Homepage> with RouteAware {
 }
 
 // Hero Section with personalized greeting
+// Replace your existing HeroSection widget with this:
+
 class HeroSection extends StatelessWidget {
   const HeroSection({super.key});
 
@@ -289,42 +291,48 @@ class HeroSection extends StatelessWidget {
         children: [
           const Clockwidget(),
 
-          // Personalized greeting at the top
-          Positioned(
-            top: 10,
-            right: 10,
-            child: Consumer<AuthViewModel>(
-              builder: (context, authViewModel, _) {
-                final userName = authViewModel.user?.name ?? 'there';
-                return Text(
-                  'Hello, $userName! 👋',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                );
-              },
-            ),
-          ),
-
+          // Stack greeting and medication count vertically on the right
           Positioned(
             right: 10,
             bottom: 10,
-            child: Consumer<HomeViewModel>(
-              builder: (context, viewModel, _) {
-                final count = viewModel.homepageData.upcomingMedicationCount;
-                final medicationText = count == 1
-                    ? 'medication'
-                    : 'medications';
-                return Text(
-                  '$count active $medicationText',
-                  textAlign: TextAlign.right,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                );
-              },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                // Personalized greeting
+                Consumer<AuthViewModel>(
+                  builder: (context, authViewModel, _) {
+                    final userName = authViewModel.user?.name ?? 'there';
+                    return Text(
+                      'Hello, $userName! 👋',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 4),
+
+                // Active medications count
+                Consumer<HomeViewModel>(
+                  builder: (context, viewModel, _) {
+                    final count =
+                        viewModel.homepageData.upcomingMedicationCount;
+                    final medicationText = count == 1
+                        ? 'medication'
+                        : 'medications';
+                    return Text(
+                      '$count active $medicationText',
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    );
+                  },
+                ),
+              ],
             ),
           ),
         ],
