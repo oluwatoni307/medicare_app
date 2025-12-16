@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../main.dart';
 import '../app_state_manager.dart';
 import '/features/auth/service.dart';
 
@@ -15,31 +16,27 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _checkAppState() async {
-    await Future.delayed(Duration(seconds: 2)); // Show splash
+    await Future.delayed(const Duration(seconds: 2));
 
-    // Check if user is already logged in
     final authService = AuthService();
-    final currentUser = await authService.getCurrentUser(); // Added await
+    final currentUser = await authService.getCurrentUser();
+
+    if (!mounted) return;
 
     if (currentUser != null) {
-      // User is logged in - go to home
-      if (mounted) {
-        // Check if widget is still mounted
+      if (!navigatedFromNotification) {
         Navigator.pushReplacementNamed(context, '/');
       }
       return;
     }
 
-    // Check if first time user
     final hasSeenOnboarding = await AppStateManager.hasSeenOnboarding();
 
-    if (!mounted) return; // Check before navigation
+    if (!mounted) return;
 
     if (hasSeenOnboarding) {
-      // Returning user, no auth - go to login
       Navigator.pushReplacementNamed(context, '/auth');
     } else {
-      // First time user - show onboarding
       Navigator.pushReplacementNamed(context, '/onboarding');
     }
   }

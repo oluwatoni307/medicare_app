@@ -15,6 +15,7 @@ import 'package:medicare_app/firebase_options.dart';
 /// GLOBAL NAVIGATOR KEY (for navigation from anywhere)
 /// ------------------------------------------------------
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+bool navigatedFromNotification = false;
 
 /// ------------------------------------------------------
 /// 1. BACKGROUND NOTIFICATION HANDLER

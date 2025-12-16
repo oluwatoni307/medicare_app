@@ -46,7 +46,7 @@ class MedicationService {
       );
 
       // Schedule all treatment notifications using Supabase-backed reminders
-      await _scheduleNotificationsForMed(hiveMed, userId);
+      _scheduleNotificationsForMed(hiveMed, userId);
 
       return hiveMed.id;
     } catch (e) {
