@@ -15,7 +15,6 @@ import 'package:medicare_app/firebase_options.dart';
 /// GLOBAL NAVIGATOR KEY (for navigation from anywhere)
 /// ------------------------------------------------------
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-bool navigatedFromNotification = false;
 
 /// ------------------------------------------------------
 /// 1. BACKGROUND NOTIFICATION HANDLER
@@ -59,7 +58,7 @@ Future<void> main() async {
     await NotificationService.instance.init();
     debugPrint("✅ NotificationService initialized");
 
-    // Setup notification tap handlers
+    // Setup notification tap handlers (ONLY for background state)
     _setupNotificationTapHandlers();
     debugPrint("✅ Notification tap handlers set up");
 
@@ -83,24 +82,17 @@ Future<void> main() async {
 /// NOTIFICATION TAP HANDLERS
 /// ------------------------------------------------------
 void _setupNotificationTapHandlers() {
-  // Handle notification tap when app is in background
+  // ONLY handle notification tap when app is in BACKGROUND
+  // (NOT when app was terminated - SplashScreen handles that)
   FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
     debugPrint('📱 Notification tapped (app in background)');
     debugPrint('📱 Data: ${message.data}');
     _navigateToSpecialPage(message);
   });
 
-  // Handle notification tap when app was completely closed
-  FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
-    if (message != null) {
-      debugPrint('📱 Notification tapped (app was closed)');
-      debugPrint('📱 Data: ${message.data}');
-      // Delay to ensure app is fully initialized
-      Future.delayed(const Duration(seconds: 1), () {
-        _navigateToSpecialPage(message);
-      });
-    }
-  });
+  // ❌ REMOVED: getInitialMessage() handling
+  // This was causing the race condition because SplashScreen also checks it
+  // Now ONLY SplashScreen handles terminated state notifications
 }
 
 void _navigateToSpecialPage(RemoteMessage message) {
@@ -111,12 +103,8 @@ void _navigateToSpecialPage(RemoteMessage message) {
   debugPrint('🔔 Navigating based on notification type: $notificationType');
 
   // Navigate to your special page
-  // Change AppRoutes.log to whatever page you want
   if (medicineId != null) {
-    navigatorKey.currentState?.pushNamed(
-      AppRoutes.log, // CHANGE THIS to your desired route
-      arguments: medicineId,
-    );
+    navigatorKey.currentState?.pushNamed(AppRoutes.log, arguments: medicineId);
     debugPrint('✅ Navigated to log page for medicine: $medicineId');
   } else {
     // If no medicine_id, navigate to a default page
@@ -142,7 +130,7 @@ class MyApp extends StatelessWidget {
         ),
       ],
       child: MaterialApp(
-        navigatorKey: navigatorKey, // ADD THIS LINE - very important!
+        navigatorKey: navigatorKey,
         debugShowCheckedModeBanner: false,
         title: 'Medstracker',
         theme: AppTheme.lightTheme,
