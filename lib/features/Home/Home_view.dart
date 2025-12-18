@@ -7,7 +7,8 @@ import '/routes.dart';
 import '/features/log/log_view.dart';
 import '/theme.dart';
 import 'Home_model.dart';
-import '/features/auth/auth_viewmodel.dart'; // Add this import
+import '/features/auth/auth_viewmodel.dart';
+import '/main.dart' show routeObserver; // Import the global RouteObserver
 
 class Homepage extends StatefulWidget {
   const Homepage({super.key});
@@ -33,17 +34,24 @@ class _HomepageState extends State<Homepage> with RouteAware {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Subscribe to RouteObserver to track when we return to this page
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) {
+      routeObserver.subscribe(this, route);
+    }
   }
 
   @override
   void didPopNext() {
-    // Refresh data when coming back from another page
+    // This NOW fires when returning from another page (e.g., LogView, NewMedicine)
     print('[Homepage] Returned from another page - refreshing data');
     _viewModel.loadCurrentUserMedications();
   }
 
   @override
   void dispose() {
+    // CRITICAL: Unsubscribe to prevent memory leaks
+    routeObserver.unsubscribe(this);
     _viewModel.dispose();
     super.dispose();
   }
@@ -56,9 +64,10 @@ class _HomepageState extends State<Homepage> with RouteAware {
         bottomNavigationBar: const BottomNavBar(),
         floatingActionButton: FloatingActionButton(
           onPressed: () async {
-            // Wait for navigation to complete, then refresh
+            // Navigate to new medicine page
+            // RouteObserver will handle refresh automatically when we return
             await Navigator.pushNamed(context, AppRoutes.new_medicine);
-            _viewModel.refresh();
+            // REMOVED: _viewModel.refresh(); - RouteObserver handles this now
           },
           child: const Icon(Icons.add),
         ),
@@ -127,18 +136,15 @@ class _HomepageState extends State<Homepage> with RouteAware {
                             return MedicationBox(
                               medication: med,
                               onTap: () async {
-                                // Wait for navigation and refresh when back
+                                // Navigate to log page
+                                // RouteObserver will handle refresh automatically when we return
                                 await Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                     builder: (_) => LogView(medicineId: med.id),
                                   ),
                                 );
-                                // Refresh data after returning from log page
-                                print(
-                                  '[Homepage] Returned from LogView - refreshing',
-                                );
-                                viewModel.refresh();
+                                // REMOVED: viewModel.refresh(); - RouteObserver handles this now
                               },
                             );
                           }).toList(),
@@ -277,8 +283,6 @@ class _HomepageState extends State<Homepage> with RouteAware {
 }
 
 // Hero Section with personalized greeting
-// Replace your existing HeroSection widget with this:
-
 class HeroSection extends StatelessWidget {
   const HeroSection({super.key});
 

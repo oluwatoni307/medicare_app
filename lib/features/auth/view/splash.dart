@@ -30,24 +30,38 @@ class _SplashScreenState extends State<SplashScreen> {
     // If user is logged in
     if (currentUser != null) {
       if (initialMessage != null) {
-        // User is logged in AND opened from notification
-        // Navigate directly to the notification destination
+        // User is logged in AND opened from notification (TERMINATED state)
         final medicineId = initialMessage.data['medicine_id'];
 
         if (medicineId != null) {
-          debugPrint('🔔 Navigating directly to log page from splash');
-          Navigator.pushReplacementNamed(
-            context,
-            AppRoutes.log,
-            arguments: medicineId,
+          debugPrint(
+            '🔔 [TERMINATED] Navigating to home first, then to log page',
           );
+
+          // CRITICAL FIX: Navigate to Homepage first, THEN push LogView
+          // This ensures Homepage is in the navigation stack
+          Navigator.pushReplacementNamed(context, AppRoutes.home);
+
+          // Wait for Homepage to build, then push LogView on top
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              Navigator.pushNamed(
+                context,
+                AppRoutes.log,
+                arguments: medicineId,
+              );
+              debugPrint('✅ [TERMINATED] Pushed LogView on top of Homepage');
+            }
+          });
         } else {
-          // No medicine_id, go to home
-          Navigator.pushReplacementNamed(context, '/');
+          // No medicine_id, just go to home
+          debugPrint('🔔 [TERMINATED] No medicine_id, navigating to home');
+          Navigator.pushReplacementNamed(context, AppRoutes.home);
         }
       } else {
-        // Normal login flow - go to home
-        Navigator.pushReplacementNamed(context, '/');
+        // Normal login flow - no notification, just go to home
+        debugPrint('✅ Normal login flow - navigating to home');
+        Navigator.pushReplacementNamed(context, AppRoutes.home);
       }
       return;
     }
@@ -59,8 +73,10 @@ class _SplashScreenState extends State<SplashScreen> {
     if (!mounted) return;
 
     if (hasSeenOnboarding) {
+      debugPrint('✅ User has seen onboarding - navigating to auth');
       Navigator.pushReplacementNamed(context, '/auth');
     } else {
+      debugPrint('✅ First time user - navigating to onboarding');
       Navigator.pushReplacementNamed(context, '/onboarding');
     }
   }
